@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="ru" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CREATIN.WORLD — концепт витрины в стиле Dprofile</title>
+<style>
+  :root {
+    --bg: #0b0b0c;
+    --surface: #121214;
+    --surface2: #18181b;
+    --surface3: #202024;
+    --text: #f4f2ee;
+    --muted: #9b9b96;
+    --line: #2a2a2f;
+    --wine: #78192f;
+    --wine2: #a22a49;
+    --ok: #70ad86;
+    --warn: #d6a95d;
+    --cyan: #5c9ead;
+    --white: #fff;
+    --header-bg: rgba(11, 11, 12, 0.96);
+    --section-bg: #101012;
+    --input-bg: #111113;
+    --control-border: #3a3a40;
+    --soft-text: #c1c0bb;
+    --inverse-bg: #fff;
+    --inverse-text: #111;
+  }
+  :root[data-theme="light"] {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface2: #eceef2;
+    --surface3: #e1e4e9;
+    --text: #17171a;
+    --muted: #656a73;
+    --line: #d7d9df;
+    --wine: #841c37;
+    --wine2: #ad294a;
+    --ok: #2f7a4a;
+    --warn: #916116;
+    --cyan: #2a7486;
+    --header-bg: rgba(245, 246, 248, 0.96);
+    --section-bg: #f1f2f5;
+    --input-bg: #ffffff;
+    --control-border: #c9ccd3;
+    --soft-text: #4f545d;
+    --inverse-bg: #17171a;
+    --inverse-text: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body { font-family: Arial, Helvetica, sans-serif; line-height: 1.45; }
+  a { color: inherit; text-decoration: none; }
+  button, select, input { font: inherit; }
+  button { cursor: pointer; }
+  img.ph { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+  /* ---------- header ---------- */
+  .header {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 68px; padding: 0 30px;
+    border-bottom: 1px solid var(--line);
+    background: var(--header-bg);
+    backdrop-filter: blur(6px);
+    gap: 20px;
+  }
+  .logo { font-size: 18px; font-weight: 700; letter-spacing: 0.2px; white-space: nowrap; }
+  .logo span { color: var(--wine2); }
+  .main-nav { display: flex; gap: 22px; flex: 1; }
+  .navbtn { font-size: 13.5px; color: var(--muted); padding: 6px 0; border-bottom: 2px solid transparent; }
+  .navbtn.active, .navbtn:hover { color: var(--text); border-color: var(--wine2); }
+  .header-actions { display: flex; align-items: center; gap: 10px; }
+  .theme-toggle {
+    width: 34px; height: 34px; border: 1px solid var(--control-border);
+    background: var(--surface2); color: var(--text); display: flex;
+    align-items: center; justify-content: center; font-size: 15px;
+  }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 36px; padding: 0 14px; font-size: 13px; border: 1px solid var(--control-border);
+    background: var(--surface2); color: var(--text); white-space: nowrap;
+  }
+  .btn.wine { border-color: var(--wine); background: var(--wine); color: #fff; }
+  .btn.wine:hover { border-color: var(--wine2); background: var(--wine2); }
+  .btn.ghost { background: transparent; }
+  .btn.small { height: 30px; padding: 0 10px; font-size: 12px; }
+
+  /* ---------- layout helpers ---------- */
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 30px; }
+  .section { padding: 46px 0; border-bottom: 1px solid var(--line); }
+  .section-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 22px; gap: 20px; flex-wrap: wrap; }
+  .eyebrow { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--wine2); margin-bottom: 8px; }
+  h1, h2, h3 { margin: 0; font-weight: 700; }
+  .section-head h2 { font-size: 24px; }
+  .section-link { font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+  .section-link:hover { color: var(--wine2); border-color: var(--wine2); }
+  .panel { border: 1px solid var(--line); background: var(--surface); }
+
+  /* ---------- hero ---------- */
+  .hero { background: var(--section-bg); padding: 56px 0 34px; border-bottom: 1px solid var(--line); }
+  .hero-inner { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 40px; align-items: center; }
+  .hero h1 { font-size: 42px; line-height: 1.12; margin-bottom: 14px; }
+  .hero h1 span { color: var(--wine2); }
+  .hero-lead { color: var(--muted); font-size: 15px; max-width: 480px; margin-bottom: 22px; }
+  .hero-actions { display: flex; gap: 10px; margin-bottom: 8px; }
+  .hero-art {
+    height: 260px; border: 1px solid var(--line);
+    background: linear-gradient(135deg, var(--wine) 0%, var(--surface3) 60%, var(--surface2) 100%);
+    position: relative; overflow: hidden;
+  }
+  .hero-art::after {
+    content: "CREATIN.WORLD"; position: absolute; right: 16px; bottom: 14px;
+    font-size: 12px; letter-spacing: 0.12em; color: rgba(255,255,255,0.75);
+  }
+  .stat-row {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
+    border: 1px solid var(--line); margin-top: 30px; background: var(--surface);
+  }
+  .stat-item { padding: 16px 18px; border-right: 1px solid var(--line); }
+  .stat-item:last-child { border-right: none; }
+  .stat-item b { display: block; font-size: 19px; margin-bottom: 3px; }
+  .stat-item span { font-size: 11.5px; color: var(--muted); }
+
+  /* ---------- ecosystem ---------- */
+  .ecosystem { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .eco { border: 1px solid var(--line); background: var(--surface); padding: 20px; }
+  .eco .num { color: var(--wine2); font-size: 12px; font-weight: 700; }
+  .eco h3 { margin: 8px 0 6px; font-size: 16px; }
+  .eco p { color: var(--muted); font-size: 13px; margin: 0; }
+
+  /* ---------- cases grid ---------- */
+  .tabs { display: flex; gap: 6px; }
+  .tab { padding: 7px 12px; font-size: 12.5px; color: var(--muted); border: 1px solid var(--line); background: var(--surface2); }
+  .tab.active { color: #fff; background: var(--wine); border-color: var(--wine); }
+  .case-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .case-card { border: 1px solid var(--line); background: var(--surface); overflow: hidden; }
+  .case-thumb { height: 168px; position: relative; }
+  .case-thumb .cat-badge {
+    position: absolute; top: 10px; left: 10px; font-size: 10.5px; padding: 3px 7px;
+    background: rgba(0,0,0,0.55); color: #fff; letter-spacing: 0.04em;
+  }
+  .case-body { padding: 13px 14px 14px; }
+  .case-body h4 { margin: 0 0 6px; font-size: 14.5px; }
+  .case-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+  .chip { border: 1px solid var(--control-border); background: var(--surface2); padding: 3px 8px; font-size: 11px; color: var(--soft-text); }
+  .case-meta { display: flex; align-items: center; justify-content: space-between; }
+  .author { display: flex; align-items: center; gap: 8px; }
+  .avatar {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--inverse-bg); color: var(--inverse-text);
+    display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700; flex-shrink: 0;
+  }
+  .author-name { font-size: 12.5px; }
+  .pro-badge { font-size: 9.5px; padding: 1px 5px; border: 1px solid var(--wine2); color: var(--wine2); margin-left: 5px; }
+  .case-stats { display: flex; gap: 10px; color: var(--muted); font-size: 11.5px; }
+
+  /* thumb gradients */
+  .g1 { background: linear-gradient(140deg,#7a1f2f,#2b2b30); }
+  .g2 { background: linear-gradient(140deg,#274c56,#18181b); }
+  .g3 { background: linear-gradient(140deg,#5c3d1e,#202024); }
+  .g4 { background: linear-gradient(140deg,#a22a49,#111113); }
+  .g5 { background: linear-gradient(140deg,#2d5c46,#18181b); }
+  .g6 { background: linear-gradient(140deg,#3a3f7a,#202024); }
+  .g7 { background: linear-gradient(140deg,#6a4b8a,#18181b); }
+  .g8 { background: linear-gradient(140deg,#8a5a2a,#111113); }
+
+  /* ---------- fragments ---------- */
+  .frag-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .frag { position: relative; height: 150px; border: 1px solid var(--line); overflow: hidden; }
+  .frag .frag-foot {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 9px;
+    background: linear-gradient(0deg, rgba(0,0,0,0.75), transparent);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .frag .frag-foot span { color: #fff; font-size: 11px; }
+  .frag .heart { position: absolute; top: 8px; right: 8px; font-size: 10.5px; color: #fff; background: rgba(0,0,0,0.45); padding: 2px 6px; }
+
+  /* ---------- catalog ---------- */
+  .filter-bar {
+    display: grid; grid-template-columns: 1.4fr 0.9fr 0.9fr 0.9fr 0.9fr auto; gap: 8px;
+    border: 1px solid var(--line); background: var(--surface); padding: 12px; margin-bottom: 18px;
+  }
+  .filter-bar select, .filter-bar input {
+    width: 100%; height: 36px; padding: 0 10px; background: var(--input-bg);
+    border: 1px solid var(--control-border); color: var(--text); font-size: 12.5px;
+  }
+  .creator-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .creator-card { border: 1px solid var(--line); background: var(--surface); padding: 16px; text-align: center; }
+  .creator-card .avatar { width: 52px; height: 52px; font-size: 15px; margin: 0 auto 10px; }
+  .creator-card h4 { margin: 0 0 4px; font-size: 14px; }
+  .creator-card .role { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  .creator-card .city { color: var(--muted); font-size: 11px; margin-bottom: 12px; }
+  .creator-card .btn { width: 100%; }
+
+  /* ---------- jobs ---------- */
+  .job-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+  .job-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .job { border: 1px solid var(--line); background: var(--surface); padding: 16px; margin-bottom: 10px; }
+  .job .meta { font-size: 11px; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.03em; }
+  .job h4 { margin: 0 0 8px; font-size: 14.5px; }
+  .job-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+  .job .btn { width: 100%; }
+
+  /* ---------- pro promo ---------- */
+  .pro-banner {
+    border: 1px solid var(--wine); background: linear-gradient(120deg, color-mix(in srgb, var(--wine) 22%, var(--surface)), var(--surface));
+    padding: 30px 32px; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+  }
+  .pro-banner .left { max-width: 560px; }
+  .pro-banner h2 { font-size: 22px; margin-bottom: 8px; }
+  .pro-banner p { color: var(--muted); font-size: 13.5px; margin: 0 0 14px; }
+  .pro-points { display: flex; gap: 18px; flex-wrap: wrap; }
+  .pro-points div { font-size: 12px; color: var(--soft-text); display: flex; gap: 6px; align-items: center; }
+  .pro-points div::before { content: "—"; color: var(--wine2); }
+  .pro-price { text-align: right; }
+  .pro-price b { font-size: 26px; display: block; }
+  .pro-price span { font-size: 11.5px; color: var(--muted); }
+
+  /* ---------- footer ---------- */
+  footer { padding: 26px 0 40px; }
+  .foot-links { display: flex; gap: 18px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+  .foot-links a:hover { color: var(--text); }
+  .foot-note { color: var(--muted); font-size: 12px; margin-top: 14px; }
+
+  .badge-new { display:inline-block; font-size:10px; padding:2px 6px; border:1px solid var(--ok); color:var(--ok); margin-left:8px; }
+
+  @media (max-width: 980px) {
+    .hero-inner, .case-grid, .creator-row, .job-cols { grid-template-columns: 1fr 1fr; }
+    .stat-row { grid-template-columns: repeat(3, 1fr); }
+    .frag-grid { grid-template-columns: repeat(3, 1fr); }
+    .filter-bar { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <a class="logo" href="#">CREATIN<span>.</span>WORLD</a>
+  <nav class="main-nav">
+    <a class="navbtn active" href="#">Главное</a>
+    <a class="navbtn" href="#catalog">Специалисты</a>
+    <a class="navbtn" href="#cases">Кейсы</a>
+    <a class="navbtn" href="#fragments">Фрагменты</a>
+    <a class="navbtn" href="#jobs">Работа</a>
+  </nav>
+  <div class="header-actions">
+    <button class="theme-toggle" id="themeToggle" title="Тема">◐</button>
+    <a class="btn ghost" href="#">Войти</a>
+    <a class="btn" href="#">Стать креатором</a>
+    <a class="btn wine" href="#">Разместить заказ</a>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap hero-inner">
+    <div>
+      <div class="eyebrow">Профессиональная платформа креативного рынка</div>
+      <h1>Работай с <span>сильнейшими.</span></h1>
+      <p class="hero-lead">Открытая витрина кейсов, фрагментов и профилей креаторов — заказчики находят исполнителей не только через отклик на заказ, но и просматривая живое портфолио платформы.</p>
+      <div class="hero-actions">
+        <a class="btn wine" href="#">Стать креатором</a>
+        <a class="btn" href="#">Разместить заказ</a>
+      </div>
+    </div>
+    <div class="hero-art"></div>
+  </div>
+  <div class="wrap">
+    <div class="stat-row">
+      <div class="stat-item"><b>1 240</b><span>Найти специалиста</span></div>
+      <div class="stat-item"><b>86</b><span>Топ студий</span></div>
+      <div class="stat-item"><b>3 180</b><span>Галерея кейсов</span></div>
+      <div class="stat-item"><b>42</b><span>Открытых заказов</span></div>
+      <div class="stat-item"><b>960</b><span>Фрагментов</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Один продукт</div>
+        <h2>Разные кабинеты для разных задач</h2>
+      </div>
+    </div>
+    <div class="ecosystem">
+      <article class="eco"><span class="num">01</span><h3>Креатор</h3><p>Анкета, кейсы, фрагменты, вакансии, отклики и чаты по заказам.</p></article>
+      <article class="eco"><span class="num">02</span><h3>Заказчик</h3><p>Компания, пакеты размещения, заказы, каталог креаторов, контакты.</p></article>
+      <article class="eco"><span class="num">03</span><h3>Админка</h3><p>Модерация, заказы, пользователи, платежи, контроль публикаций.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="cases">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Открытая галерея</div>
+        <h2>Кейсы дня</h2>
+      </div>
+      <div class="tabs">
+        <span class="tab active">Все</span>
+        <span class="tab">Брендинг</span>
+        <span class="tab">Интерфейсы</span>
+        <span class="tab">Видео</span>
+        <span class="tab">Иллюстрация</span>
+      </div>
+    </div>
+    <div class="case-grid">
+      <div class="case-card">
+        <div class="case-thumb g1"><span class="cat-badge">Брендинг</span></div>
+        <div class="case-body">
+          <h4>Айдентика для локальной кофейни</h4>
+          <div class="case-tags"><span class="chip">Брендинг</span><span class="chip">Графика</span></div>
+          <div class="case-meta">
+            <div class="author"><div class="avatar">АК</div><span class="author-name">Анна Ким<span class="pro-badge">PRO</span></span></div>
+            <div class="case-stats"><span>♡ 84</span><span>◎ 412</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="case-card">
+        <div class="case-thumb g2"><span class="cat-badge">Интерфейсы</span></div>
+        <div class="case-body">
+          <h4>Мобильное приложение для фитнес-студии</h4>
+          <div class="case-tags"><span class="chip">UI/UX</span><span class="chip">Мобильный дизайн</span></div>
+          <div class="case-meta">
+            <div class="author"><div class="avatar">ИЛ</div><span class="author-name">Игорь Лебедев</span></div>
+            <div class="case-stats"><span>♡ 63</span><span>◎ 298</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="case-card">
+        <div class="case-thumb g3"><span class="cat-badge">Видео</span></div>
+        <div class="case-body">
+          <h4>Рекламный ролик для запуска бренда</h4>
+          <div class="case-tags"><span class="chip">Видео</span><span class="chip">Моушн</span></div>
+          <div class="case-meta">
+            <div class="author"><div class="avatar">НС</div><span class="author-name">Никита Смирнов<span class="pro-badge">PRO</span></span></div>
+            <div class="case-stats"><span>♡ 41</span><span>◎ 175</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="case-card">
+        <div class="case-thumb g4"><span class="cat-badge">Графика</span></div>
+        <div class="case-body">
+          <h4>Серия иллюстраций для журнала</h4>
+          <div class="case-tags"><span class="chip">Иллюстрация</span></div>
+          <div class="case-meta">
+            <div class="author"><div class="avatar">ПШ</div><span class="author-name">Полина Шумкова</span></div>
+            <div class="case-stats"><span>♡ 52</span><span>◎ 201</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="case-card">
+        <div class="case-thumb g5"><span class="cat-badge">Маркетинг</span></div>
+        <div class="case-body">
+          <h4>Стратегия запуска для e-commerce</h4>
+          <div class="case-tags"><span class="chip">Маркетинг</span><span class="chip">Стратегия</span></div>
+          <div class="case-meta">
+            <div class="author"><div class="avatar">ДЗ</div><span class="author-name">Дарья Зайцева<span class="pro-badge">PRO</span></span></div>
+            <div class="case-stats"><span>♡ 37</span><span>◎ 140</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="case-card">
+        <div class="case-thumb g6"><span class="cat-badge">AI</span></div>
+        <div class="case-body">
+          <h4>Нейро-иллюстрации для обложек</h4>
+          <div class="case-tags"><span class="chip">AI</span><span class="chip">Графика</span></div>
+          <div class="case-meta">
+            <div class="author"><div class="avatar">ВК</div><span class="author-name">Валерия Куликова</span></div>
+            <div class="case-stats"><span>♡ 29</span><span>◎ 118</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="fragments">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Быстрые публикации</div>
+        <h2>Фрагменты<span class="badge-new">формат без порога входа</span></h2>
+      </div>
+      <a class="section-link" href="#">Все фрагменты →</a>
+    </div>
+    <div class="frag-grid">
+      <div class="frag g1"><span class="heart">♡ 11</span><div class="frag-foot"><div class="avatar" style="width:18px;height:18px;font-size:8px;">АС</div><span>Ангелина С.</span></div></div>
+      <div class="frag g2"><span class="heart">♡ 12</span><div class="frag-foot"><div class="avatar" style="width:18px;height:18px;font-size:8px;">ТК</div><span>Тимур К.</span></div></div>
+      <div class="frag g3"><span class="heart">♡ 10</span><div class="frag-foot"><div class="avatar" style="width:18px;height:18px;font-size:8px;">СР</div><span>Света Р.</span></div></div>
+      <div class="frag g7"><span class="heart">♡ 8</span><div class="frag-foot"><div class="avatar" style="width:18px;height:18px;font-size:8px;">ЖБ</div><span>Женя Б.</span></div></div>
+      <div class="frag g8"><span class="heart">♡ 9</span><div class="frag-foot"><div class="avatar" style="width:18px;height:18px;font-size:8px;">ДА</div><span>Дарья А.</span></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="catalog">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Каталог</div>
+        <h2>Найти специалиста</h2>
+      </div>
+      <a class="section-link" href="#">Открыть полный каталог →</a>
+    </div>
+    <div class="filter-bar">
+      <input type="text" placeholder="Поиск по имени или роли" />
+      <select><option>Все категории</option><option>Дизайн</option><option>Видео</option><option>Тексты</option><option>Маркетинг</option><option>AI</option></select>
+      <select><option>Город</option><option>Москва</option><option>Санкт-Петербург</option><option>Удалённо</option></select>
+      <select><option>Бюджет</option><option>от 20 тыс ₽</option><option>от 50 тыс ₽</option><option>от 100 тыс ₽</option></select>
+      <select><option>Формат</option><option>Проектно</option><option>Постоянно</option></select>
+      <button class="btn wine small">Найти</button>
+    </div>
+    <div class="creator-row">
+      <div class="creator-card">
+        <div class="avatar">АК</div>
+        <h4>Анна Ким <span class="pro-badge">PRO</span></h4>
+        <div class="role">UI/UX дизайнер</div>
+        <div class="city">Москва · Проектно</div>
+        <a class="btn" href="#">Смотреть профиль</a>
+      </div>
+      <div class="creator-card">
+        <div class="avatar">ИЛ</div>
+        <h4>Игорь Лебедев</h4>
+        <div class="role">Motion designer</div>
+        <div class="city">Санкт-Петербург</div>
+        <a class="btn" href="#">Смотреть профиль</a>
+      </div>
+      <div class="creator-card">
+        <div class="avatar">ПШ</div>
+        <h4>Полина Шумкова <span class="pro-badge">PRO</span></h4>
+        <div class="role">2D иллюстратор</div>
+        <div class="city">Удалённо</div>
+        <a class="btn" href="#">Смотреть профиль</a>
+      </div>
+      <div class="creator-card">
+        <div class="avatar">НС</div>
+        <h4>Никита Смирнов</h4>
+        <div class="role">Копирайтер</div>
+        <div class="city">Краснодар</div>
+        <a class="btn" href="#">Смотреть профиль</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="jobs">
+  <div class="wrap">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Работа и заказы</div>
+        <h2>Актуальные предложения</h2>
+      </div>
+      <div class="job-tabs">
+        <span class="tab active">Вакансии</span>
+        <span class="tab">Заказы</span>
+      </div>
+    </div>
+    <div class="job-cols">
+      <div>
+        <div class="job">
+          <div class="meta">CW-1042 · Дизайн</div>
+          <h4>Продуктовый дизайнер в штат</h4>
+          <div class="job-tags"><span class="chip">Компания</span><span class="chip">от 180 тыс ₽/мес</span><span class="chip">Москва</span></div>
+          <a class="btn" href="#">Откликнуться</a>
+        </div>
+        <div class="job">
+          <div class="meta">CW-1039 · Маркетинг</div>
+          <h4>Маркетолог на проектную занятость</h4>
+          <div class="job-tags"><span class="chip">Компания</span><span class="chip">от 90 тыс ₽/мес</span><span class="chip">Удалённо</span></div>
+          <a class="btn" href="#">Откликнуться</a>
+        </div>
+      </div>
+      <div>
+        <div class="job">
+          <div class="meta">CW-2118 · Видео</div>
+          <h4>Ролик для запуска бренда одежды</h4>
+          <div class="job-tags"><span class="chip">От заказчика</span><span class="chip">от 60 тыс ₽</span><span class="chip">10 дней</span></div>
+          <a class="btn" href="#">Откликнуться</a>
+        </div>
+        <div class="job">
+          <div class="meta">CW-2101 · Брендинг</div>
+          <h4>Айдентика для кофейни</h4>
+          <div class="job-tags"><span class="chip">От креатора</span><span class="chip">от 40 тыс ₽</span><span class="chip">14 дней</span></div>
+          <a class="btn" href="#">Откликнуться</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="border-bottom:none;">
+  <div class="wrap">
+    <div class="pro-banner">
+      <div class="left">
+        <h2>Аккаунт PRO для креаторов</h2>
+        <p>Продвижение в каталоге и приоритет в поиске заказчиков — новый источник дохода платформы помимо пакетов заказчика.</p>
+        <div class="pro-points">
+          <div>Попадание в основной каталог специалистов</div>
+          <div>Продвижение в топе поиска 1–2 раза в месяц</div>
+          <div>Больше слотов на кейсы и фрагменты</div>
+          <div>Скидка на платное размещение заказов</div>
+        </div>
+      </div>
+      <div class="pro-price">
+        <b>390 ₽/мес</b>
+        <span>при оплате за год</span>
+        <div style="margin-top:10px;"><a class="btn wine" href="#">Подключить PRO</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-links">
+      <a href="#">Оферта</a>
+      <a href="#">Правила пользования</a>
+      <a href="#">Политика конфиденциальности</a>
+      <a href="#">Юридическая информация</a>
+    </div>
+    <div class="foot-note">Концепт-версия главной страницы CREATIN.WORLD — вдохновлено структурой Dprofile: открытая галерея кейсов, фрагменты, каталог с гео-фильтром, PRO-аккаунт для креаторов. Раздел образования/менторства и публичный рейтинг сюда намеренно не включены.</div>
+  </div>
+</footer>
+
+<script>
+  const root = document.documentElement;
+  const toggle = document.getElementById('themeToggle');
+  toggle.addEventListener('click', () => {
+    const next = root.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    root.setAttribute('data-theme', next);
+    toggle.textContent = next === 'light' ? '◑' : '◐';
+  });
+
+  document.querySelectorAll('.tabs, .job-tabs').forEach(group => {
+    group.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        group.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+  });
+</script>
+
+</body>
+</html>

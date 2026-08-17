@@ -1,0 +1,411 @@
+// Схема БД маркетплейса CREATIN.WORLD: креаторы и заказчики регистрируются
+// через Telegram (см. lib/telegram.ts / lib/session.ts), проходят анкету и
+// (опционально, по feature-flag'ам из lib/config.ts) оплату и модерацию,
+// после чего заказчики публикуют заказы (Order), креаторы откликаются
+// (Application), AI подбирает топ-3 (AiMatch/AiLog), а переписка идёт только
+// внутри чата, привязанного к конкретному отклику (Chat, не свободные ЛС).
+//
+// Изменения схемы в этом проекте — руками написанные SQL-миграции в
+// prisma/migrations/000N_.../migration.sql (по конвенции `prisma migrate
+// dev`), а не автогенерация — см. историю миграций для примера формата.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CREATOR
+  CLIENT
+  ADMIN
+}
+
+// Воронка анкеты креатора: DRAFT -> (если flags.paymentsRequired)
+// PAYMENT_PENDING -> (если flags.moderationRequired) MODERATION -> APPROVED,
+// либо сразу DRAFT -> APPROVED, если оба флага выключены. isApproved=true
+// выставляется только на APPROVED — именно это поле, а не status, определяет
+// доступ в кабинет (см. AccessGateScreen в components/platform/PlatformShell.tsx).
+enum CreatorStatus {
+  DRAFT
+  PAYMENT_PENDING
+  MODERATION
+  APPROVED
+  REJECTED
+}
+
+// Та же логика, что у CreatorStatus, но для карточки компании заказчика.
+// У заказчика нет отдельного шага "оплата вступления" — оплата привязана
+// не к профилю, а к конкретному заказу/пакету (см. OrderStatus, Package).
+enum ClientStatus {
+  DRAFT
+  MODERATION
+  APPROVED
+  REJECTED
+}
+
+// Различает, из-за чего анкета креатора встала на модерацию:
+// вход на платформу (мини-анкета при регистрации) или
+// расширенная анкета исполнителя (полный профиль в кабинете).
+enum CreatorModerationStage {
+  REGISTRATION
+  PROFILE
+}
+
+// Воронка публикации заказа (см. POST /api/orders и lib/payments.ts):
+// DRAFT -> PAYMENT_PENDING (если нужна оплата публикации) -> MODERATION
+// (если нужна модерация) -> PUBLISHED. Только PUBLISHED-заказы видны в
+// открытой ленте /jobs и каталоге; PAYMENT_PENDING виден только заказчику
+// в его кабинете с кнопкой "Оплатить публикацию".
+enum OrderStatus {
+  DRAFT
+  PAYMENT_PENDING
+  MODERATION
+  PUBLISHED
+  REJECTED
+  COMPLETED
+  ARCHIVED
+}
+
+enum OrderInitiator {
+  CLIENT
+  CREATOR
+}
+
+enum ApplicationStatus {
+  SENT
+  VIEWED
+  SHORTLISTED
+  CHAT_OPEN
+  REJECTED
+  ACCEPTED
+}
+
+enum PaymentStatus {
+  CREATED
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentProvider {
+  TEST
+}
+
+enum ChatStatus {
+  OPEN
+  CLOSED
+}
+
+enum InvitationStatus {
+  SENT
+  ACCEPTED
+  DECLINED
+}
+
+model User {
+  id                     String          @id @default(cuid())
+  telegramId             String          @unique
+  telegramUsername       String?
+  name                   String
+  email                  String?
+  notificationPreference String          @default("telegram")
+  role                   Role
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  creatorProfile         CreatorProfile?
+  clientProfile          ClientProfile?
+  sentMessages           Message[]       @relation("MessageSender")
+  payments               Payment[]
+  auditLogs              AuditLog[]
+}
+
+model CreatorProfile {
+  id              String              @id @default(cuid())
+  userId          String              @unique
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName       String
+  lastName        String
+  city            String?
+  category        String
+  primaryRole     String
+  level           String
+  experienceYears Int
+  expertise       String[]
+  bio             String
+  portfolioUrl    String?
+  cases           String?
+  workFormat      String
+  availability    String
+  minBudget       Int
+  hourlyRate      Int?
+  telegramContact String?
+  photoUrl        String?
+  score           Int                 @default(80)
+  status          CreatorStatus       @default(DRAFT)
+  moderationStage CreatorModerationStage @default(REGISTRATION)
+  membershipPaid  Boolean             @default(false)
+  isApproved      Boolean             @default(false)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  files           PortfolioFile[]
+  applications    Application[]
+  invitations     Invitation[]
+  aiMatches       AiMatch[]
+  chats           Chat[]
+  payments        Payment[]
+}
+
+model PortfolioFile {
+  id               String         @id @default(cuid())
+  creatorProfileId String
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  fileName         String
+  mimeType         String
+  size             Int
+  storageKey       String
+  url              String
+  createdAt        DateTime       @default(now())
+}
+
+model ClientProfile {
+  id                String     @id @default(cuid())
+  userId            String     @unique
+  user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyName       String
+  website           String?
+  industry          String
+  description       String?
+  contactName       String
+  contactTitle      String?
+  legalType         String?
+  inn               String?
+  hasDatabaseAccess Boolean    @default(false)
+  activePackageId   String?
+  activePackage     Package?   @relation(fields: [activePackageId], references: [id])
+  status            ClientStatus @default(DRAFT)
+  isApproved        Boolean    @default(false)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  orders            Order[]
+  invitations       Invitation[]
+  payments          Payment[]
+  chats             Chat[]
+}
+
+// Тарифы для заказчика (см. seed.ts): сейчас ровно два активных пакета —
+// "1 вакансия" и "3 вакансии" (placements). perks — список пунктов "плюсы"
+// для карточки тарифа в кабинете (components/platform/PlatformShell.tsx,
+// PaymentPane); если пуст, фронт сам собирает дефолтный список из
+// placements/databaseAccess (см. packagePerks() там же).
+model Package {
+  id             String          @id @default(cuid())
+  code           String          @unique
+  title          String
+  description    String
+  priceCents     Int?
+  placements     Int?
+  databaseAccess Boolean         @default(false)
+  perks          String[]        @default([])
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  clients        ClientProfile[]
+  payments       Payment[]
+}
+
+model Order {
+  id                 String        @id @default(cuid())
+  publicId           String        @unique
+  clientProfileId    String
+  clientProfile      ClientProfile @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  title              String
+  category           String
+  description        String
+  requirements       String
+  budget             String
+  deadline           String
+  initiator          OrderInitiator @default(CLIENT)
+  status             OrderStatus   @default(DRAFT)
+  paymentRequired    Boolean       @default(false)
+  moderationRequired Boolean       @default(false)
+  publishedAt        DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  applications       Application[]
+  invitations        Invitation[]
+  aiMatches          AiMatch[]
+  aiLogs             AiLog[]
+  payments           Payment[]
+  chats              Chat[]
+}
+
+model Application {
+  id               String            @id @default(cuid())
+  orderId          String
+  order            Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  creatorProfileId String
+  creatorProfile   CreatorProfile    @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  status           ApplicationStatus @default(SENT)
+  message          String
+  relevantCase     String?
+  priceCents       Int?
+  duration         String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  chat             Chat?
+
+  @@unique([orderId, creatorProfileId])
+}
+
+model Invitation {
+  id               String           @id @default(cuid())
+  orderId          String
+  order            Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  creatorProfileId String
+  creatorProfile   CreatorProfile   @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  clientProfileId  String
+  clientProfile    ClientProfile    @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  message          String
+  status           InvitationStatus @default(SENT)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([orderId, creatorProfileId])
+}
+
+model Chat {
+  id               String         @id @default(cuid())
+  orderId          String
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  applicationId    String         @unique
+  application      Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  clientProfileId  String
+  clientProfile    ClientProfile  @relation(fields: [clientProfileId], references: [id], onDelete: Cascade)
+  creatorProfileId String
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  status           ChatStatus     @default(OPEN)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  messages         Message[]
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model Payment {
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientProfileId  String?
+  clientProfile    ClientProfile?  @relation(fields: [clientProfileId], references: [id])
+  creatorProfileId String?
+  creatorProfile   CreatorProfile? @relation(fields: [creatorProfileId], references: [id])
+  packageId        String?
+  package          Package?        @relation(fields: [packageId], references: [id])
+  orderId          String?
+  order            Order?          @relation(fields: [orderId], references: [id])
+  provider         PaymentProvider @default(TEST)
+  status           PaymentStatus   @default(CREATED)
+  amountCents      Int?
+  currency         String          @default("RUB")
+  testPayload      Json?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}
+
+// Итоговые (успешные) рекомендации топ-3 по заказу — то, что показывается
+// заказчику. Полностью пересоздаются при каждом запуске подбора
+// (deleteMany + create в lib/ai.ts::matchCreatorsForOrder), поэтому rank
+// 1..3 всегда актуален и без дублей.
+model AiMatch {
+  id               String         @id @default(cuid())
+  orderId          String
+  order            Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  creatorProfileId String
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  rank             Int
+  score            Int
+  rationale        String
+  provider         String
+  rawResponse      Json?
+  createdAt        DateTime       @default(now())
+
+  @@unique([orderId, creatorProfileId])
+}
+
+// В отличие от AiMatch — не итоговый результат, а лог каждой попытки
+// подбора (успех или ошибка), включая то, что реально ушло во внешний AI
+// (request) и что он вернул (response) или почему упал (error). Не чистится
+// автоматически — пригождается для отладки, если рекомендации выглядят странно.
+model AiLog {
+  id        String   @id @default(cuid())
+  orderId   String?
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  provider  String
+  status    String
+  request   Json
+  response  Json?
+  error     String?
+  createdAt DateTime @default(now())
+}
+
+// Переключатели воронки, правятся из админки. key соответствует dbFlagKey
+// в lib/config.ts ("payments.required", "moderation.required",
+// "ai.external_required") — при добавлении нового флага завести пару
+// ключей и там, и там.
+model FeatureFlag {
+  key         String   @id
+  enabled     Boolean  @default(false)
+  description String
+  updatedAt   DateTime @updatedAt
+}
+
+// Задел на будущее: модель промокодов есть в схеме, но пока нигде не
+// используется в бизнес-логике (нет применения скидки при оплате).
+model PromoCode {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  description String
+  discountPct Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+// Рекламные/партнёрские плашки на публичной странице "Партнёры".
+// Публикуются только вручную из админки — креатор и заказчик не могут
+// создавать или редактировать их из личного кабинета.
+model Partner {
+  id          String   @id @default(cuid())
+  title       String
+  sponsorName String
+  description String
+  imageUrl    String?
+  linkUrl     String
+  active      Boolean  @default(true)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Журнал действий админа (одобрение/отклонение анкет и заказов, публикация
+// партнёров и т.д.) — пишется из app/api/admin/**/route.ts. actorId nullable
+// и onDelete: SetNull, чтобы удаление пользователя не сносило историю действий.
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?
+  payload   Json?
+  createdAt DateTime @default(now())
+}

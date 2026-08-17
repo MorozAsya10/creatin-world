@@ -1,0 +1,119 @@
+import { Role } from "@prisma/client";
+import { z } from "zod";
+import { ok, fail, ApiError } from "@/lib/api";
+import { prisma } from "@/lib/prisma";
+import { getCurrentUser, requireUser } from "@/lib/session";
+
+const updateSchema = z.object({
+  status: z.enum(["PUBLISHED", "REJECTED", "COMPLETED", "ARCHIVED"])
+});
+
+// Один и тот же роут отдаёт и публичную карточку заказа (гостю или чужому
+// креатору — только опубликованные заказы, без чужих откликов), и полную
+// картину владельцу/админу (все отклики, полные данные компании, AI-топ-3).
+// Объём данных зависит от canManage/isOwnApplication ниже, а не от отдельных
+// query-параметров — то есть весь access control сосредоточен в одном месте.
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const user = await getCurrentUser();
+    const baseOrder = await prisma.order.findFirst({
+      where: {
+        OR: [{ id }, { publicId: id }]
+      }
+    });
+
+    if (!baseOrder) throw new ApiError(404, "Order not found");
+
+    const isOwner =
+      user?.role === Role.CLIENT &&
+      user.clientProfile?.id === baseOrder.clientProfileId;
+    const canManage = user?.role === Role.ADMIN || isOwner;
+    const isOwnApplication =
+      user?.role === Role.CREATOR && Boolean(user.creatorProfile);
+
+    if (!canManage && baseOrder.status !== "PUBLISHED") {
+      throw new ApiError(404, "Order not found");
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id: baseOrder.id },
+      include: {
+        clientProfile: canManage
+          ? true
+          : {
+              select: {
+                companyName: true,
+                industry: true,
+                description: true
+              }
+            },
+        applications: {
+          where: canManage
+            ? {}
+            : isOwnApplication
+              ? { creatorProfileId: user.creatorProfile!.id }
+              : { id: "__hidden__" },
+          include: {
+            creatorProfile: {
+              include: {
+                user: canManage,
+                files: true
+              }
+            },
+            chat: true
+          },
+          orderBy: { createdAt: "desc" }
+        },
+        aiMatches: {
+          orderBy: { rank: "asc" },
+          include: {
+            creatorProfile: {
+              include: { files: true }
+            }
+          }
+        }
+      }
+    });
+
+    return ok({ order });
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const admin = await requireUser([Role.ADMIN]);
+    const { id } = await params;
+    const { status } = updateSchema.parse(await request.json());
+    const existing = await prisma.order.findFirst({
+      where: { OR: [{ id }, { publicId: id }] }
+    });
+    if (!existing) throw new ApiError(404, "Заказ не найден");
+
+    const order = await prisma.order.update({
+      where: { id: existing.id },
+      data: {
+        status,
+        publishedAt: status === "PUBLISHED" ? new Date() : existing.publishedAt
+      }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: admin.id,
+        action: `order.${status.toLowerCase()}`,
+        entity: "Order",
+        entityId: order.id
+      }
+    });
+
+    return ok({ order });
+  } catch (error) {
+    return fail(error);
+  }
+}
