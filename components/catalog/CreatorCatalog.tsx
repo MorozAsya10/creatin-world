@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, RotateCcw, Search } from "lucide-react";
+import { RotateCcw, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { CreatorProfileDialog } from "@/components/catalog/CreatorProfileDialog";
@@ -170,58 +170,44 @@ export function CreatorCatalog({ scope = "public", canSeeContacts = false, rende
         {sortedCreators.length ? (
           sortedCreators.map((creator) => (
             <article className="profile-card" key={creator.id}>
-              <div className="profile-card-media">
-                {creator.photoUrl ? (
-                  <img src={creator.photoUrl} alt="" loading="lazy" />
-                ) : (
-                  <Avatar name={`${creator.firstName} ${creator.lastName}`} className="avatar-lg" />
-                )}
-              </div>
-              <div className="profile-card-body">
-                <div className="profile-top">
-                  <div>
-                    <h3>
-                      {creator.firstName} {creator.lastName}
-                    </h3>
-                    <div className="meta">{creator.primaryRole}</div>
-                  </div>
-                  {/* Единый индекс креатора (0-100%) — составной: заполненность
-                      профиля + активность на платформе + доля заказчиков,
-                      готовых рекомендовать (см. lib/rating.ts). Отдельного
-                      счётчика "рекомендуют N из M" больше нет — он входил бы в
-                      этот же индекс, а не показывался бы рядом. */}
-                  <span className="score" title="Индекс: заполненность анкеты + активность + рекомендации заказчиков">{creator.score}%</span>
-                </div>
-                <p>{creator.bio}</p>
+              <div className="profile-top">
+                <Avatar name={`${creator.firstName} ${creator.lastName}`} photoUrl={creator.photoUrl} />
                 <div>
-                  {creator.expertise.map((tag) => (
-                    <span className="tag" key={`${creator.id}-${tag}`}>
-                      {tag}
-                    </span>
-                  ))}
+                  <h3>
+                    {creator.firstName} {creator.lastName}
+                  </h3>
+                  <div className="meta">{creator.primaryRole}</div>
                 </div>
-                <div className="meta" style={{ marginTop: 12 }}>
-                  {creator.level} · {creator.workFormat} · {budgetLabel(creator.minBudget)}
+                {/* Единый индекс креатора (0-100%) — составной: заполненность
+                    профиля + активность на платформе + доля заказчиков,
+                    готовых рекомендовать (см. lib/rating.ts). Отдельного
+                    счётчика "рекомендуют N из M" больше нет — он входил бы в
+                    этот же индекс, а не показывался бы рядом. */}
+                <span className="score" title="Индекс: заполненность анкеты + активность + рекомендации заказчиков">{creator.score}%</span>
+              </div>
+              <p>{creator.bio}</p>
+              <div>
+                {creator.expertise.map((tag) => (
+                  <span className="tag" key={`${creator.id}-${tag}`}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+              <div className="meta" style={{ marginTop: 12 }}>
+                {creator.level} · {creator.workFormat} · {budgetLabel(creator.minBudget)}
+              </div>
+              {contactsVisible ? (
+                <div style={{ marginTop: 12 }}>
+                  <b>{creator.telegramContact || (creator.user?.telegramUsername ? `@${creator.user.telegramUsername}` : "Контакт не указан")}</b>
                 </div>
-                {contactsVisible ? (
-                  <div style={{ marginTop: 12 }}>
-                    <b>{creator.telegramContact || (creator.user?.telegramUsername ? `@${creator.user.telegramUsername}` : "Контакт не указан")}</b>
-                  </div>
-                ) : (
-                  <div className="contact-mask">{scope === "public" ? "Загружаем контакт..." : "Контакт скрыт выбранным пакетом"}</div>
-                )}
-                <div className="profile-actions">
-                  {renderAction?.(creator)}
-                  <button
-                    className="circle-btn"
-                    type="button"
-                    onClick={() => setSelectedCreator(creator)}
-                    aria-label="Смотреть профиль"
-                    title="Смотреть профиль"
-                  >
-                    <ArrowUpRight size={18} />
-                  </button>
-                </div>
+              ) : (
+                <div className="contact-mask">{scope === "public" ? "Загружаем контакт..." : "Контакт скрыт выбранным пакетом"}</div>
+              )}
+              <div className="profile-actions">
+                <button className="btn" type="button" onClick={() => setSelectedCreator(creator)}>
+                  Смотреть профиль
+                </button>
+                {renderAction?.(creator)}
               </div>
             </article>
           ))
