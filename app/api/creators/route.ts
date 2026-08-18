@@ -62,8 +62,8 @@ export async function GET(request: NextRequest) {
     const canSeeContacts =
       scope === "public" ||
       user?.role === Role.ADMIN ||
-      (user?.role === Role.CLIENT &&
-        (!flags.paymentsRequired || Boolean(user.clientProfile?.hasDatabaseAccess)));
+      (Boolean(user?.clientProfile) &&
+        (!flags.paymentsRequired || Boolean(user?.clientProfile?.hasDatabaseAccess)));
 
     const filtered = creators.filter((creator) => {
       const budgetMatches =

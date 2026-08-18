@@ -66,8 +66,12 @@ export async function GET(request: NextRequest) {
   try {
     const user = await getCurrentUser();
     const scope = request.nextUrl.searchParams.get("scope") || "public";
+    // scope=mine проверяем по наличию clientProfile, а не по user.role —
+    // дуал-профильный пользователь (см. lib/dual-role.ts) может смотреть
+    // "мои заказы" в клиентском виде кабинета, даже если изначально
+    // зарегистрировался как креатор.
     const where =
-      scope === "mine" && user?.role === Role.CLIENT && user.clientProfile
+      scope === "mine" && user?.clientProfile
         ? { clientProfileId: user.clientProfile.id }
         : scope === "admin" && user?.role === Role.ADMIN
           ? {}
@@ -99,7 +103,10 @@ export async function POST(request: NextRequest) {
     const body = createOrderSchema.parse(await request.json());
     const flags = await getFeatureFlags();
 
-    const clientProfile = user.role === Role.CLIENT
+    // По user.clientProfile, а не user.role === CLIENT — один аккаунт
+    // может держать карточку заказчика вместе с анкетой креатора (см.
+    // hasRole в lib/session.ts), это не обязательно "изначальная" роль.
+    const clientProfile = user.clientProfile
       ? user.clientProfile
       : body.clientProfileId
         ? await prisma.clientProfile.findUnique({ where: { id: body.clientProfileId } })
@@ -108,7 +115,7 @@ export async function POST(request: NextRequest) {
     if (!clientProfile) {
       throw new ApiError(400, user.role === Role.ADMIN ? "Выберите заказчика" : "Заполните карточку компании");
     }
-    if (user.role === Role.CLIENT && !clientProfile.isApproved) {
+    if (user.clientProfile && !clientProfile.isApproved) {
       throw new ApiError(403, "Дождитесь одобрения анкеты администратором");
     }
 
@@ -122,10 +129,11 @@ export async function POST(request: NextRequest) {
     if (body.kind === "PROJECT" && positionTitles.length === 0) {
       throw new ApiError(400, "Добавьте хотя бы одну позицию для проекта");
     }
-    // Волонтёрская позиция доступна только для проектов — у вакансии нет
-    // смысла в отдельном "бесплатном" отклике, там и так один отклик = один
-    // специалист.
-    const acceptsVolunteers = body.kind === "PROJECT" && body.acceptsVolunteers;
+    // Волонтёрскую позицию можно добавить и вакансии, и проекту: заказчик
+    // просто получает второй, бесплатный вариант отклика в дополнение к
+    // основному — например, ищет одного оплачиваемого специалиста, но готов
+    // рассмотреть и волонтёра для той же задачи.
+    const acceptsVolunteers = body.acceptsVolunteers;
 
     // Админ публикует сразу; для остальных — оплата приоритетнее модерации
     // (сначала PAYMENT_PENDING, оплата переводит в MODERATION или сразу в
@@ -151,7 +159,7 @@ export async function POST(request: NextRequest) {
       kind: body.kind,
       acceptsVolunteers,
       paymentRequired: flags.paymentsRequired,
-      moderationRequired: user.role === Role.CLIENT && flags.moderationRequired,
+      moderationRequired: Boolean(user.clientProfile) && flags.moderationRequired,
       publishedAt: status === "PUBLISHED" ? new Date() : null,
       positions: {
         create: [

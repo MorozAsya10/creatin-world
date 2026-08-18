@@ -240,10 +240,11 @@ model Order {
   initiator          OrderInitiator @default(CLIENT)
   status             OrderStatus   @default(DRAFT)
   kind               OrderKind     @default(VACANCY)
-  // Только для kind=PROJECT: если true, при публикации/редактировании к
+  // Доступно и вакансии, и проекту: если true, при создании заказа к
   // позициям добавляется ещё одна служебная "Волонтёр" (OrderPosition с
   // isVolunteer=true) — отклик на неё доступен без оплаты/пакета, см.
-  // комментарий у OrderPosition.isVolunteer.
+  // комментарий у OrderPosition.isVolunteer. У вакансии это просто
+  // добавляет вторую, бесплатную кнопку отклика рядом с основной.
   acceptsVolunteers  Boolean       @default(false)
   paymentRequired    Boolean       @default(false)
   moderationRequired Boolean       @default(false)

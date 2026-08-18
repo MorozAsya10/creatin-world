@@ -105,12 +105,29 @@ export async function getCurrentUser() {
   });
 }
 
+type SessionUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
+
+// Один Telegram-аккаунт может держать и анкету креатора, и карточку
+// заказчика одновременно (см. app/api/profiles/{creator,client}/route.ts —
+// POST активирует вторую роль на существующем пользователе). Поэтому доступ
+// к CREATOR/CLIENT-действиям проверяем не по единственному User.role
+// (это скорее "как человек изначально зарегистрировался"), а по факту
+// наличия нужного профиля — так дуал-профильный пользователь проходит оба
+// гейта. ADMIN — исключение, отдельного "профиля админа" нет, для него
+// role остаётся источником истины.
+function hasRole(user: SessionUser, role: Role) {
+  if (role === Role.ADMIN) return user.role === Role.ADMIN;
+  if (role === Role.CREATOR) return Boolean(user.creatorProfile);
+  if (role === Role.CLIENT) return Boolean(user.clientProfile);
+  return false;
+}
+
 // Используется в начале почти каждого app/api/**/route.ts: без roles —
-// просто требует авторизации, с roles — ещё и проверяет доступ по ролям.
+// просто требует авторизации, с roles — ещё и проверяет доступ (см. hasRole).
 // Бросает ApiError, которую ловит lib/api.ts::fail() и превращает в 401/403.
 export async function requireUser(roles?: Role[]) {
   const user = await getCurrentUser();
   if (!user) throw new ApiError(401, "Authentication required");
-  if (roles && !roles.includes(user.role)) throw new ApiError(403, "Forbidden");
+  if (roles && !roles.some((role) => hasRole(user, role))) throw new ApiError(403, "Forbidden");
   return user;
 }

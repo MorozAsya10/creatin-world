@@ -141,7 +141,8 @@ export async function POST(request: NextRequest) {
     const normalized = normalizeTelegramUser(payload);
 
     const existing = await prisma.user.findUnique({
-      where: { telegramId: normalized.telegramId }
+      where: { telegramId: normalized.telegramId },
+      include: { creatorProfile: true, clientProfile: true }
     });
 
     const configuredAdminIds = new Set(
@@ -167,7 +168,24 @@ export async function POST(request: NextRequest) {
       throw new ApiError(404, "Аккаунт с этим Telegram не найден. Нажмите «Зарегистрироваться».");
     }
 
-    if (mode === "register" && existing) {
+    // Один Telegram-аккаунт может завести и анкету креатора, и карточку
+    // заказчика (см. hasRole в lib/session.ts) — поэтому "уже
+    // зарегистрирован" означает не просто "user с таким telegramId
+    // существует", а "у него уже есть профиль именно той роли, которую
+    // сейчас просят зарегистрировать". Если профиль другой роли уже есть, а
+    // этой ещё нет — это активация второй роли на существующем аккаунте, а
+    // не дубль. (Основной путь для неё — кнопка в кабинете, см.
+    // POST /api/profiles/{creator,client}; эта ветка — подстраховка, если
+    // человек всё равно попал на /login и нажал «Зарегистрироваться».)
+    const alreadyHasRequestedRole = existing
+      ? normalized.role === Role.CREATOR
+        ? Boolean(existing.creatorProfile)
+        : normalized.role === Role.CLIENT
+          ? Boolean(existing.clientProfile)
+          : existing.role === Role.ADMIN
+      : false;
+
+    if (mode === "register" && alreadyHasRequestedRole) {
       throw new ApiError(409, "Этот Telegram-аккаунт уже зарегистрирован. Войдите через «Являюсь пользователем».");
     }
 
@@ -188,7 +206,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (mode === "register") {
-      await createRoleProfileFromRegistration(user.id, user.role, payload.registration, user.telegramUsername || undefined);
+      // Регистрируем именно запрошенную роль (normalized.role), а не
+      // user.role — при активации второй роли на существующем аккаунте они
+      // могут отличаться.
+      await createRoleProfileFromRegistration(user.id, normalized.role, payload.registration, user.telegramUsername || undefined);
     } else {
       await ensureRoleProfile(user.id, user.role, user.telegramUsername || undefined);
     }

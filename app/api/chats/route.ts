@@ -1,23 +1,30 @@
+import { NextRequest } from "next/server";
 import { Role } from "@prisma/client";
 import { z } from "zod";
 import { ok, fail, ApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
+import { resolveViewRole } from "@/lib/dual-role";
 
 const createChatSchema = z.object({
   applicationId: z.string().min(1)
 });
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await requireUser();
-    if (user.role === Role.CREATOR && !user.creatorProfile) return ok({ chats: [] });
-    if (user.role === Role.CLIENT && !user.clientProfile) return ok({ chats: [] });
+    // Один аккаунт может держать и анкету креатора, и карточку заказчика
+    // (см. lib/dual-role.ts) — ?as=CREATOR|CLIENT говорит, какой из двух
+    // наборов чатов сейчас нужен фронту (см. activeView в PlatformShell.tsx),
+    // без параметра — как раньше, по основной роли аккаунта.
+    const viewRole = resolveViewRole(user, request.nextUrl.searchParams.get("as"));
+    if (viewRole === Role.CREATOR && !user.creatorProfile) return ok({ chats: [] });
+    if (viewRole === Role.CLIENT && !user.clientProfile) return ok({ chats: [] });
 
     const where =
-      user.role === Role.CREATOR
+      viewRole === Role.CREATOR
         ? { creatorProfileId: user.creatorProfile!.id }
-        : user.role === Role.CLIENT
+        : viewRole === Role.CLIENT
           ? { clientProfileId: user.clientProfile!.id }
           : {};
 
@@ -61,7 +68,7 @@ export async function POST(request: Request) {
     });
 
     if (!application) throw new ApiError(404, "Application not found");
-    if (user.role === Role.CLIENT && user.clientProfile?.id !== application.order.clientProfileId) {
+    if (user.clientProfile && user.clientProfile.id !== application.order.clientProfileId) {
       throw new ApiError(403, "Only the order owner can open this chat");
     }
 

@@ -25,12 +25,13 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
 
     if (!baseOrder) throw new ApiError(404, "Order not found");
 
-    const isOwner =
-      user?.role === Role.CLIENT &&
-      user.clientProfile?.id === baseOrder.clientProfileId;
+    // По наличию профиля, а не user.role — см. hasRole в lib/session.ts
+    // (дуал-профильный пользователь управляет своими заказами как заказчик
+    // и откликается как креатор независимо от того, кем изначально
+    // зарегистрировался).
+    const isOwner = Boolean(user?.clientProfile?.id) && user?.clientProfile?.id === baseOrder.clientProfileId;
     const canManage = user?.role === Role.ADMIN || isOwner;
-    const isOwnApplication =
-      user?.role === Role.CREATOR && Boolean(user.creatorProfile);
+    const isOwnApplication = Boolean(user?.creatorProfile);
 
     if (!canManage && baseOrder.status !== "PUBLISHED") {
       throw new ApiError(404, "Order not found");
@@ -53,7 +54,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
           where: canManage
             ? {}
             : isOwnApplication
-              ? { creatorProfileId: user.creatorProfile!.id }
+              ? { creatorProfileId: user!.creatorProfile!.id }
               : { id: "__hidden__" },
           include: {
             creatorProfile: {
@@ -102,8 +103,12 @@ export async function PATCH(
     });
     if (!existing) throw new ApiError(404, "Заказ не найден");
 
-    const isOwner = user.role === Role.CLIENT && user.clientProfile?.id === existing.clientProfileId;
-    if (user.role === Role.CLIENT) {
+    // По наличию clientProfile, а не user.role === CLIENT — см. hasRole в
+    // lib/session.ts (дуал-профильный пользователь может управлять своими
+    // заказами как заказчик, даже если изначально зарегистрировался как
+    // креатор).
+    if (user.clientProfile) {
+      const isOwner = user.clientProfile.id === existing.clientProfileId;
       if (!isOwner) throw new ApiError(403, "Это не ваш заказ");
       if (status !== "COMPLETED") throw new ApiError(403, "Заказчик может только отметить заказ выполненным");
     }

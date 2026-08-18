@@ -1,6 +1,6 @@
 import { Role } from "@prisma/client";
 import { z } from "zod";
-import { ok, fail } from "@/lib/api";
+import { ok, fail, ApiError } from "@/lib/api";
 import { getFeatureFlags } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
@@ -16,6 +16,44 @@ const schema = z.object({
   inn: z.string().optional(),
   email: z.string().email().or(z.literal("")).optional()
 });
+
+const activateSchema = z.object({
+  companyName: z.string().trim().min(2, "Укажите название компании").max(120),
+  industry: z.string().trim().min(2, "Укажите сферу деятельности").max(120),
+  contactName: z.string().trim().min(2, "Укажите контактное лицо").max(120)
+});
+
+// Активация роли заказчика на уже существующем аккаунте (см. комментарий у
+// hasRole в lib/session.ts) — например, креатор, который хочет разместить
+// свой первый заказ. В отличие от регистрации через /login, повторная
+// Telegram-верификация не нужна: пользователь уже аутентифицирован в
+// текущей сессии, форма короткая и вызывается прямо из кабинета (см.
+// activateClientRole в PlatformShell.tsx).
+export async function POST(request: Request) {
+  try {
+    const user = await requireUser();
+    if (user.clientProfile) throw new ApiError(409, "У вас уже есть карточка заказчика");
+
+    const body = activateSchema.parse(await request.json());
+    const flags = await getFeatureFlags();
+    const status = flags.moderationRequired ? "MODERATION" : "APPROVED";
+
+    const profile = await prisma.clientProfile.create({
+      data: {
+        userId: user.id,
+        companyName: body.companyName,
+        industry: body.industry,
+        contactName: body.contactName,
+        status,
+        isApproved: !flags.moderationRequired
+      }
+    });
+
+    return ok({ profile }, { status: 201 });
+  } catch (error) {
+    return fail(error);
+  }
+}
 
 // Карточка компании ("расширенная анкета" заказчика). В отличие от
 // креатора, у заказчика нет шага PAYMENT_PENDING на этом этапе — сохранение

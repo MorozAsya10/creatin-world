@@ -1,8 +1,10 @@
+import { NextRequest } from "next/server";
 import { InvitationStatus, Role } from "@prisma/client";
 import { z } from "zod";
 import { ok, fail, ApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
+import { resolveViewRole } from "@/lib/dual-role";
 
 const createSchema = z.object({
   orderId: z.string().min(1),
@@ -10,16 +12,17 @@ const createSchema = z.object({
   message: z.string().min(10).max(1000)
 });
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const user = await requireUser();
-    if (user.role === Role.CREATOR && !user.creatorProfile) return ok({ invitations: [] });
-    if (user.role === Role.CLIENT && !user.clientProfile) return ok({ invitations: [] });
+    const viewRole = resolveViewRole(user, request.nextUrl.searchParams.get("as"));
+    if (viewRole === Role.CREATOR && !user.creatorProfile) return ok({ invitations: [] });
+    if (viewRole === Role.CLIENT && !user.clientProfile) return ok({ invitations: [] });
 
     const where =
-      user.role === Role.CREATOR
+      viewRole === Role.CREATOR
         ? { creatorProfileId: user.creatorProfile!.id }
-        : user.role === Role.CLIENT
+        : viewRole === Role.CLIENT
           ? { clientProfileId: user.clientProfile!.id }
           : {};
 
@@ -58,7 +61,7 @@ export async function POST(request: Request) {
     });
 
     if (!order) throw new ApiError(404, "Заказ не найден");
-    if (user.role === Role.CLIENT && user.clientProfile?.id !== order.clientProfileId) {
+    if (user.clientProfile && user.clientProfile.id !== order.clientProfileId) {
       throw new ApiError(403, "Приглашать может только владелец заказа");
     }
     if (order.status !== "PUBLISHED") {

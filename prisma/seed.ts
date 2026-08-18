@@ -331,6 +331,10 @@ async function main() {
     include: { positions: true }
   });
 
+  // Демо-вакансия с открытым волонтёрским откликом: показывает, что
+  // acceptsVolunteers доступен не только проекту, но и вакансии с одним
+  // "основным" откликом — на посте появляется вторая, бесплатная кнопка
+  // отклика рядом с обычной (см. Order.acceptsVolunteers в schema.prisma).
   const order20 = await prisma.order.create({
     data: {
       publicId: "ORD-020",
@@ -344,7 +348,13 @@ async function main() {
       initiator: "CREATOR",
       status: OrderStatus.PUBLISHED,
       publishedAt: new Date(),
-      positions: { create: { title: "Монтажер Reels на постоянный объем" } }
+      acceptsVolunteers: true,
+      positions: {
+        create: [
+          { title: "Монтажер Reels на постоянный объем" },
+          { title: "Волонтёр", isVolunteer: true }
+        ]
+      }
     },
     include: { positions: true }
   });

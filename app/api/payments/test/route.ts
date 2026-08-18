@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       if (!body.orderId) throw new ApiError(400, "orderId is required");
       const order = await prisma.order.findUnique({ where: { id: body.orderId } });
       if (!order) throw new ApiError(404, "Заказ не найден");
-      if (user.role === Role.CLIENT && order.clientProfileId !== user.clientProfile?.id) {
+      if (user.clientProfile && order.clientProfileId !== user.clientProfile.id) {
         throw new ApiError(403, "Заказ не принадлежит вашей компании");
       }
       if (order.status !== "PAYMENT_PENDING") {
@@ -55,15 +55,14 @@ export async function POST(request: Request) {
     const selectedPackage = await prisma.package.findUnique({ where: { id: body.packageId } });
     if (!selectedPackage) throw new ApiError(404, "Package not found");
 
-    const clientProfile =
-      user.role === Role.CLIENT
-        ? user.clientProfile
-        : body.clientProfileId
-          ? await prisma.clientProfile.findUnique({ where: { id: body.clientProfileId } })
-          : null;
+    const clientProfile = user.clientProfile
+      ? user.clientProfile
+      : body.clientProfileId
+        ? await prisma.clientProfile.findUnique({ where: { id: body.clientProfileId } })
+        : null;
 
     if (!clientProfile) {
-      throw new ApiError(400, user.role === Role.CLIENT ? "Client profile is required" : "Укажите clientProfileId");
+      throw new ApiError(400, "Укажите clientProfileId");
     }
 
     const payment = await createTestPayment({

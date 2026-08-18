@@ -22,8 +22,11 @@ export async function POST(request: Request) {
       where: { OR: [{ id: orderId }, { publicId: orderId }] }
     });
     if (!order) throw new ApiError(404, "Order not found");
-    // Заказчик может запускать подбор только по своим заказам; админ — по любым.
-    if (user.role === Role.CLIENT && user.clientProfile?.id !== order.clientProfileId) {
+    // Заказчик может запускать подбор только по своим заказам; админ — по
+    // любым. Проверяем по наличию clientProfile, а не user.role — см.
+    // hasRole в lib/session.ts (дуал-профильный пользователь может быть
+    // заказчиком, даже если изначально зарегистрировался как креатор).
+    if (user.clientProfile && user.clientProfile.id !== order.clientProfileId) {
       throw new ApiError(403, "Only the order owner can run AI matching");
     }
 

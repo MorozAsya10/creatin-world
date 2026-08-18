@@ -26,10 +26,12 @@ export async function POST(request: Request) {
       throw new ApiError(415, "Поддерживаются PDF, JPG, PNG, WEBP и MP4");
     }
 
+    // user.creatorProfile — не user.role === CREATOR: один аккаунт может
+    // держать анкету креатора и карточку заказчика одновременно (см.
+    // hasRole в lib/session.ts), поэтому наличие своего профиля важнее
+    // "изначальной" роли.
     const creatorProfileId =
-      user.role === Role.CREATOR
-        ? user.creatorProfile?.id
-        : String(formData.get("creatorProfileId") || "");
+      user.creatorProfile?.id || String(formData.get("creatorProfileId") || "");
 
     if (!creatorProfileId) throw new ApiError(400, "creatorProfileId is required");
 

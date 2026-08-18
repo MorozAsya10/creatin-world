@@ -65,6 +65,14 @@ const roleLabel = {
   ADMIN: "Администратор"
 };
 
+// Один аккаунт может держать и анкету креатора, и карточку заказчика
+// одновременно (см. hasRole в lib/session.ts) — activeView в PlatformShell
+// хранит, какой из двух кабинетов сейчас открыт, независимо от того, с какой
+// ролью человек изначально зарегистрировался (user.role). Персистим в
+// localStorage, чтобы выбор не сбрасывался при обновлении страницы.
+const ACTIVE_VIEW_STORAGE_KEY = "creatin_active_view";
+type CabinetView = "CREATOR" | "CLIENT";
+
 function formatMoney(cents?: number | null) {
   if (!cents) return "Цена уточняется";
   return new Intl.NumberFormat("ru-RU", {
@@ -125,12 +133,35 @@ export function PlatformShell() {
   const [toast, setToast] = useState("");
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [activeView, setActiveView] = useState<CabinetView | null>(null);
 
   const user = bootstrap?.user || null;
+  // Пока activeView ещё не инициализирован (первая загрузка, см. эффект
+  // ниже) — падаем назад на user.role, чтобы не мигать пустым кабинетом.
+  const view: CabinetView = activeView || (user?.role === "CLIENT" ? "CLIENT" : "CREATOR");
+
+  useEffect(() => {
+    if (!user || activeView) return;
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(ACTIVE_VIEW_STORAGE_KEY) : null;
+    const hasCreator = Boolean(user.creatorProfile);
+    const hasClient = Boolean(user.clientProfile);
+    const savedIsUsable = (saved === "CREATOR" && hasCreator) || (saved === "CLIENT" && hasClient);
+    if (savedIsUsable) {
+      setActiveView(saved as CabinetView);
+      return;
+    }
+    // Без сохранённого выбора — по основной роли аккаунта, если у неё есть
+    // профиль, иначе по тому профилю, который вообще есть.
+    if (user.role === "CLIENT" && hasClient) setActiveView("CLIENT");
+    else if (user.role === "CREATOR" && hasCreator) setActiveView("CREATOR");
+    else if (hasCreator) setActiveView("CREATOR");
+    else if (hasClient) setActiveView("CLIENT");
+    else setActiveView(user.role === "CLIENT" ? "CLIENT" : "CREATOR");
+  }, [user, activeView]);
 
   const menu = useMemo(() => {
-    return user?.role === "CLIENT" ? clientMenu() : creatorMenu();
-  }, [user?.role]);
+    return view === "CLIENT" ? clientMenu() : creatorMenu();
+  }, [view]);
 
   const groupedMenu = useMemo(() => {
     return menu.reduce<Record<string, MenuItem[]>>((acc, item) => {
@@ -148,13 +179,19 @@ export function PlatformShell() {
     return data;
   }
 
-  async function loadRoleData(currentUser: ApiUser) {
-    const orderScope = currentUser.role === "CLIENT" ? "mine" : currentUser.role === "ADMIN" ? "admin" : "public";
+  // roleForData — какой набор данных грузить: явный viewOverride (при
+  // переключении кабинета, см. switchView), иначе текущий activeView, иначе
+  // (самая первая загрузка, до того как activeView вообще посчитан) —
+  // основная роль аккаунта. Для ADMIN всегда просто currentUser.role.
+  async function loadRoleData(currentUser: ApiUser, viewOverride?: CabinetView) {
+    const roleForData = currentUser.role === "ADMIN" ? "ADMIN" : viewOverride || activeView || currentUser.role;
+    const orderScope = roleForData === "CLIENT" ? "mine" : roleForData === "ADMIN" ? "admin" : "public";
+    const asParam = roleForData === "ADMIN" ? "" : `?as=${roleForData}`;
     const [ordersResponse, applicationsResponse, invitationsResponse, chatsResponse] = await Promise.all([
       fetch(`/api/orders?scope=${orderScope}`),
-      currentUser.role === "ADMIN" ? Promise.resolve(null) : fetch("/api/applications"),
-      fetch("/api/invitations"),
-      fetch("/api/chats")
+      currentUser.role === "ADMIN" ? Promise.resolve(null) : fetch(`/api/applications${asParam}`),
+      fetch(`/api/invitations${asParam}`),
+      fetch(`/api/chats${asParam}`)
     ]);
 
     if (!ordersResponse.ok) throw new Error(await responseError(ordersResponse, "Не удалось загрузить заказы"));
@@ -208,18 +245,31 @@ export function PlatformShell() {
     router.replace(`/platform?pane=chats&chatId=${encodeURIComponent(chatId)}`, { scroll: false });
   }
 
-  async function refreshAll() {
+  async function refreshAll(viewOverride?: CabinetView) {
     try {
       setLoadError("");
       const nextBootstrap = await loadBootstrap();
-      if (nextBootstrap.user) await loadRoleData(nextBootstrap.user);
+      if (nextBootstrap.user) await loadRoleData(nextBootstrap.user, viewOverride);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Не удалось обновить данные");
     }
   }
 
+  // Переключение между кабинетом креатора и заказчика на одном аккаунте
+  // (см. комментарий у ACTIVE_VIEW_STORAGE_KEY). viewOverride передаём в
+  // refreshAll напрямую, а не полагаемся на activeView из состояния — setState
+  // асинхронный, и loadRoleData иначе на этот же вызов ещё увидит старое значение.
+  function switchView(next: CabinetView) {
+    setActiveView(next);
+    if (typeof window !== "undefined") window.localStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, next);
+    setPane("overview");
+    router.replace("/platform?pane=overview", { scroll: false });
+    void refreshAll(next);
+  }
+
   useEffect(() => {
     void refreshAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -231,11 +281,12 @@ export function PlatformShell() {
   }, [searchParams]);
 
   useEffect(() => {
-    const isClientOrderDetail = user?.role === "CLIENT" && pane === "orderDetail";
+    const isClientOrderDetail = view === "CLIENT" && pane === "orderDetail";
     if (user && !menu.some((item) => item.id === pane) && !isClientOrderDetail) {
       openPane("overview");
     }
-  }, [user?.role, pane, menu]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, pane, menu]);
 
   if (!bootstrap && !loadError) {
     return <div className="section fill"><div className="loading">Загружаем кабинет...</div></div>;
@@ -275,10 +326,23 @@ export function PlatformShell() {
     );
   }
 
+  const hasCreatorProfile = Boolean(user.creatorProfile);
+  const hasClientProfile = Boolean(user.clientProfile);
+
   if (user.role !== "ADMIN") {
-    const profile = user.role === "CREATOR" ? user.creatorProfile : user.clientProfile;
+    const profile = view === "CREATOR" ? user.creatorProfile : user.clientProfile;
+    const otherView: CabinetView = view === "CREATOR" ? "CLIENT" : "CREATOR";
+    const otherProfile = view === "CREATOR" ? user.clientProfile : user.creatorProfile;
     if (!profile?.isApproved) {
-      return <AccessGateScreen user={user} refreshAll={refreshAll} />;
+      return (
+        <AccessGateScreen
+          user={user}
+          view={view}
+          refreshAll={refreshAll}
+          otherViewApproved={Boolean(otherProfile?.isApproved)}
+          onSwitchView={() => switchView(otherView)}
+        />
+      );
     }
   }
 
@@ -299,11 +363,15 @@ export function PlatformShell() {
     openPane,
     openOrder,
     openChat,
-    flags: bootstrap.flags
+    flags: bootstrap.flags,
+    activeView: view,
+    switchView,
+    hasCreatorProfile,
+    hasClientProfile
   };
 
   const content =
-    user.role === "CREATOR"
+    view === "CREATOR"
       ? renderCreatorPane(paneContext)
       : renderClientPane({ ...paneContext, packages: bootstrap.packages });
 
@@ -314,9 +382,19 @@ export function PlatformShell() {
           <Avatar name={user.name} photoUrl={user.creatorProfile?.photoUrl} />
           <div>
             <b>{user.name}</b>
-            <span>{roleLabel[user.role]}</span>
+            <span>{roleLabel[view]}</span>
           </div>
         </div>
+        {hasCreatorProfile && hasClientProfile ? (
+          <div className="cabinet-switch" role="radiogroup" aria-label="Кабинет">
+            <button type="button" className={view === "CREATOR" ? "active" : ""} onClick={() => switchView("CREATOR")}>Креатор</button>
+            <button type="button" className={view === "CLIENT" ? "active" : ""} onClick={() => switchView("CLIENT")}>Заказчик</button>
+          </div>
+        ) : (
+          <button type="button" className="cabinet-switch-add" onClick={() => openPane("settings")}>
+            {view === "CREATOR" ? "+ Тоже разместить заказ" : "+ Тоже откликаться как креатор"}
+          </button>
+        )}
         {Object.entries(groupedMenu).map(([group, items]) => (
           <div className={`side-group ${group === "Финансы" ? "bottom" : ""}`} key={group}>
             <div className="side-title">{group}</div>
@@ -343,8 +421,20 @@ export function PlatformShell() {
 // (DRAFT/PAYMENT_PENDING/MODERATION/REJECTED — см. CreatorStatus/ClientStatus
 // в schema.prisma). Единственное действие, доступное отсюда — оплата
 // вступления при PAYMENT_PENDING; на MODERATION остаётся только "обновить статус".
-function AccessGateScreen({ user, refreshAll }: { user: ApiUser; refreshAll: () => Promise<void> }) {
-  const profile = user.role === "CREATOR" ? user.creatorProfile : user.clientProfile;
+function AccessGateScreen({
+  user,
+  view,
+  refreshAll,
+  otherViewApproved,
+  onSwitchView
+}: {
+  user: ApiUser;
+  view: "CREATOR" | "CLIENT";
+  refreshAll: () => Promise<void>;
+  otherViewApproved: boolean;
+  onSwitchView: () => void;
+}) {
+  const profile = view === "CREATOR" ? user.creatorProfile : user.clientProfile;
   const status = profile?.status || "DRAFT";
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -402,6 +492,18 @@ function AccessGateScreen({ user, refreshAll }: { user: ApiUser; refreshAll: () 
           <h2 className="page-title">{copy.title}</h2>
           <p className="page-copy">{copy.text}</p>
           {error ? <div className="notice error-notice">{error}</div> : null}
+          {/* Если у аккаунта есть и вторая, уже одобренная роль (см.
+              hasRole в lib/session.ts) — не держим человека перед этим
+              экраном, пока первая на рассмотрении: даём сразу перейти в
+              рабочий кабинет второй роли. */}
+          {otherViewApproved ? (
+            <div className="notice" style={{ marginTop: 16 }}>
+              Кабинет {view === "CREATOR" ? "заказчика" : "креатора"} у вас уже открыт.{" "}
+              <button className="btn ghost" type="button" onClick={onSwitchView} style={{ marginLeft: 8 }}>
+                Перейти туда
+              </button>
+            </div>
+          ) : null}
           <div className="hero-actions" style={{ marginTop: 16 }}>
             {status === "PAYMENT_PENDING" ? (
               <button className="btn wine" type="button" onClick={() => void payMembership()} disabled={busy}>
@@ -437,6 +539,12 @@ type PaneContext = {
   openOrder: (orderId: string) => void;
   openChat: (chatId: string) => void;
   flags: FeatureFlags;
+  // Какой из двух кабинетов сейчас открыт (см. ACTIVE_VIEW_STORAGE_KEY) —
+  // не путать с user.role, который остаётся "изначальной" ролью аккаунта.
+  activeView: CabinetView;
+  switchView: (next: CabinetView) => void;
+  hasCreatorProfile: boolean;
+  hasClientProfile: boolean;
 };
 
 // renderCreatorPane/renderClientPane — простой роутер "id панели -> компонент".
@@ -685,10 +793,22 @@ function CreatorOnboarding(ctx: PaneContext) {
   );
 }
 
-// Вакансия — одна позиция, отклик выглядит как раньше (одна кнопка на весь
-// пост). Проект — своя кнопка/статус на каждую позицию (включая
-// волонтёрскую, если заказчик её открыл), поэтому цель отклика — не сам
-// заказ, а конкретная позиция внутри него (см. OrderPosition в lib/types.ts).
+// Человекочитаемое название позиции для UI. У проекта позиции именованы
+// заказчиком (см. NewOrderPane) — показываем их как есть. У вакансии
+// единственная "основная" позиция технически называется как сам заказ
+// (дублирует title, см. app/api/orders/route.ts), поэтому в списке из
+// нескольких кнопок (вакансия + волонтёр) заголовок заказа повторять не
+// нужно — подписываем её просто "Основной отклик".
+function positionLabel(order: Order, position: OrderPosition) {
+  if (position.isVolunteer) return "Волонтёр";
+  return order.kind === "PROJECT" ? position.title : "Основной отклик";
+}
+
+// Если у заказа одна позиция — отклик выглядит как раньше (одна кнопка на
+// весь пост). Если позиций несколько (проект с несколькими ролями, и/или
+// вакансия/проект с открытым волонтёрским откликом) — своя кнопка/статус на
+// каждую позицию, поэтому цель отклика — не сам заказ, а конкретная позиция
+// внутри него (см. OrderPosition в lib/types.ts).
 function CreatorJobs(ctx: PaneContext) {
   const [selectedTarget, setSelectedTarget] = useState<{ order: Order; position: OrderPosition } | null>(null);
   const appliedByPosition = new Map(
@@ -741,7 +861,7 @@ function CreatorJobs(ctx: PaneContext) {
       </div>
       {selectedTarget ? (
         <form className="panel application-form" onSubmit={apply}>
-          <div className="panel-head"><span className="panel-title">Отклик на {selectedTarget.order.publicId}{selectedTarget.order.kind === "PROJECT" ? ` · ${selectedTarget.position.title}` : ""}</span><button className="btn ghost" type="button" onClick={() => setSelectedTarget(null)}>Отмена</button></div>
+          <div className="panel-head"><span className="panel-title">Отклик на {selectedTarget.order.publicId}{(selectedTarget.order.positions?.length || 0) > 1 ? ` · ${positionLabel(selectedTarget.order, selectedTarget.position)}` : ""}</span><button className="btn ghost" type="button" onClick={() => setSelectedTarget(null)}>Отмена</button></div>
           <div className="panel-body">
             <div className="form-row"><label>Почему вы подходите</label><textarea name="message" minLength={10} required defaultValue="Подходит мой опыт и портфолио. Готов(а) обсудить бриф и показать релевантные кейсы." /></div>
             <div className="form-grid">
@@ -756,11 +876,11 @@ function CreatorJobs(ctx: PaneContext) {
       <div className="panel"><div className="panel-body">
         {ctx.orders.length ? ctx.orders.map((order) => {
           const positions = order.positions || [];
-          const action = !positions.length ? null : order.kind === "PROJECT" ? (
+          const action = !positions.length ? null : positions.length > 1 ? (
             <div className="position-actions">
               {positions.map((position) => (
                 <div className="position-action-row" key={position.id}>
-                  <span className="position-name">{position.title}{position.isVolunteer ? <span className="chip">волонтёр</span> : null}</span>
+                  <span className="position-name">{positionLabel(order, position)}</span>
                   {positionAction(order, position)}
                 </div>
               ))}
@@ -1072,7 +1192,7 @@ function NewOrderPane(ctx: PaneContext) {
           initiator: String(form.get("initiator")),
           kind,
           positions: kind === "PROJECT" ? cleanPositions : undefined,
-          acceptsVolunteers: kind === "PROJECT" && acceptsVolunteers
+          acceptsVolunteers
         })
       });
       if (!response.ok) {
@@ -1123,12 +1243,16 @@ function NewOrderPane(ctx: PaneContext) {
               ))}
             </div>
             <button type="button" className="btn ghost" onClick={addPosition}>+ Добавить позицию</button>
-            <label className="checkbox-row">
-              <input type="checkbox" checked={acceptsVolunteers} onChange={(event) => setAcceptsVolunteers(event.target.checked)} />
-              <span>Разрешить волонтёрские отклики (без оплаты, для портфолио)</span>
-            </label>
           </div>
         ) : null}
+        {/* Волонтёрская позиция доступна и вакансии, и проекту — не только
+            "сборке команды": заказчик может искать одного оплачиваемого
+            специалиста и параллельно быть открытым к волонтёру на ту же
+            задачу (см. комментарий у Order.acceptsVolunteers в schema.prisma). */}
+        <label className="checkbox-row">
+          <input type="checkbox" checked={acceptsVolunteers} onChange={(event) => setAcceptsVolunteers(event.target.checked)} />
+          <span>Разрешить волонтёрские отклики (без оплаты, для портфолио)</span>
+        </label>
         <div className="form-row"><label>От кого заказ</label><SelectControl name="initiator" defaultValue="CLIENT"><option value="CLIENT">От заказчика</option><option value="CREATOR">От креатора</option></SelectControl></div>
         {/* Лимит по символам — чтобы не превращалось в простыню (см. комментарий у createOrderSchema в app/api/orders/route.ts) */}
         <div className="form-row"><label>Описание и ожидаемый результат</label><textarea name="description" minLength={10} maxLength={6000} required placeholder="Опишите задачу, контекст и ожидаемый результат (до 6000 символов)" /></div>
@@ -1287,9 +1411,12 @@ function ApplicationRow({
         <div className="application-copy">{application.message}</div>
         <div className="job-tags">
           <span className="chip">{creator.primaryRole} · {creator.level}</span>
-          {/* Позиция актуальна только для проекта — у вакансии она одна и
-              так понятна из заголовка заказа, повторять её незачем. */}
-          {application.order?.kind === "PROJECT" && application.position ? <span className="chip">{application.position.title}</span> : null}
+          {/* Название позиции показываем, только если оно что-то добавляет:
+              у проекта позиции именованы заказчиком, у волонтёрской позиции
+              (в том числе на вакансии) — это отдельный, бесплатный тип
+              отклика. "Основную" позицию вакансии без волонтёров не
+              подписываем — она и так ясна из заголовка заказа. */}
+          {application.position && application.order && (application.order.kind === "PROJECT" || application.position.isVolunteer) ? <span className="chip">{positionLabel(application.order, application.position)}</span> : null}
           {application.priceCents ? <span className="chip">{formatMoney(application.priceCents)}</span> : null}
           {application.duration ? <span className="chip">{application.duration}</span> : null}
           <span className={`status ${application.chat ? "ok" : "warn"}`}>{statusLabel(application.status)}</span>
@@ -1302,7 +1429,7 @@ function ApplicationRow({
         {/* Оценка "рекомендую/не рекомендую" доступна заказчику только после
             того, как сам заказ отмечен выполненным (см. completeOrder выше) —
             до этого момента оценивать нечего. */}
-        {ctx.user.role === "CLIENT" && application.order?.status === "COMPLETED" ? (
+        {ctx.activeView === "CLIENT" && application.order?.status === "COMPLETED" ? (
           application.clientRecommended === null || application.clientRecommended === undefined ? (
             <div className="recommend-row">
               <button className="btn" type="button" onClick={() => void recommendApplication(ctx, application, true)} disabled={ctx.busy}>Рекомендую</button>
@@ -1374,15 +1501,16 @@ function ClientOrderDetail(ctx: PaneContext) {
         <div className="panel-body">
           {!orderApplications.length ? (
             <div className="empty compact">На этот заказ откликов пока нет.</div>
-          ) : order.kind === "PROJECT" && order.positions?.length ? (
-            // Проект — группируем отклики по позициям (сборка команды), а
-            // не показываем их одной общей лентой, чтобы было видно, кто
-            // на какую роль откликнулся.
-            order.positions.map((position) => {
+          ) : (order.positions?.length || 0) > 1 ? (
+            // Несколько позиций (проект и/или открытый волонтёрский отклик,
+            // в т.ч. у вакансии) — группируем отклики по позициям, а не
+            // показываем их одной общей лентой, чтобы было видно, кто на
+            // какую роль откликнулся.
+            order.positions!.map((position) => {
               const positionApplications = orderApplications.filter((application) => application.positionId === position.id);
               return (
                 <div className="position-group" key={position.id}>
-                  <div className="position-group-head">{position.title}{position.isVolunteer ? <span className="chip">волонтёр</span> : null}<span className="result-count">{positionApplications.length}</span></div>
+                  <div className="position-group-head">{positionLabel(order, position)}<span className="result-count">{positionApplications.length}</span></div>
                   {positionApplications.length ? positionApplications.map((application) => <ApplicationRow key={application.id} application={application} ctx={ctx} onProfile={setSelectedCreator} />) : <div className="empty compact">На эту позицию откликов пока нет.</div>}
                 </div>
               );
@@ -1545,7 +1673,7 @@ function ChatPane(ctx: PaneContext) {
   const activeChat = ctx.chats.find((chat) => chat.id === ctx.activeChatId) || ctx.chats[0];
   const [body, setBody] = useState("");
   const counterpart = activeChat
-    ? ctx.user.role === "CREATOR"
+    ? ctx.activeView === "CREATOR"
       ? activeChat.clientProfile.companyName
       : `${activeChat.creatorProfile.firstName} ${activeChat.creatorProfile.lastName}`
     : "";
@@ -1583,7 +1711,7 @@ function ChatPane(ctx: PaneContext) {
           <div className="chat-list">
             {ctx.chats.map((chat) => {
               const lastMessage = chat.messages.at(-1);
-              const chatName = ctx.user.role === "CREATOR"
+              const chatName = ctx.activeView === "CREATOR"
                 ? chat.clientProfile.companyName
                 : `${chat.creatorProfile.firstName} ${chat.creatorProfile.lastName}`;
               return (
@@ -1648,6 +1776,130 @@ function SettingsPane(ctx: PaneContext) {
         <div className="form-row"><label>Тема интерфейса</label><ThemeControl /></div>
         <button className="btn wine" disabled={ctx.busy} style={{ marginTop: 12 }}>{ctx.busy ? "Сохраняем..." : "Сохранить"}</button>
       </div></form>
+      <RoleActivationPanel ctx={ctx} />
     </>
+  );
+}
+
+// Активация второй роли на этом же аккаунте (см. hasRole в lib/session.ts
+// и POST /api/profiles/{creator,client}) — без выхода и повторного входа
+// через Telegram-виджет, коротким переиспользуемым куском анкеты. Если обе
+// роли уже есть — просто ничего не рендерим здесь, переключатель между ними
+// уже виден в шапке сайдбара.
+function RoleActivationPanel({ ctx }: { ctx: PaneContext }) {
+  const [busy, setBusy] = useState(false);
+
+  if (ctx.hasCreatorProfile && ctx.hasClientProfile) return null;
+
+  async function activateClient(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    try {
+      const response = await fetch("/api/profiles/client", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          companyName: String(form.get("companyName")),
+          industry: String(form.get("industry")),
+          contactName: String(form.get("contactName"))
+        })
+      });
+      if (!response.ok) {
+        ctx.showToast(await responseError(response, "Не удалось активировать роль заказчика"));
+        return;
+      }
+      ctx.showToast("Готово — теперь можно размещать заказы");
+      ctx.switchView("CLIENT");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function activateCreator(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    try {
+      const response = await fetch("/api/profiles/creator", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          firstName: String(form.get("firstName")),
+          lastName: String(form.get("lastName")),
+          category: String(form.get("category")),
+          primaryRole: String(form.get("primaryRole")),
+          experienceYears: Number(form.get("experienceYears") || 0)
+        })
+      });
+      if (!response.ok) {
+        ctx.showToast(await responseError(response, "Не удалось активировать роль креатора"));
+        return;
+      }
+      ctx.showToast("Готово — теперь можно откликаться на заказы");
+      ctx.switchView("CREATOR");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const [defaultFirstName, defaultLastName] = ctx.user.name.split(/\s+/, 2);
+
+  return (
+    <form
+      className="panel"
+      style={{ marginTop: 14 }}
+      onSubmit={ctx.hasClientProfile ? activateCreator : activateClient}
+    >
+      <div className="panel-head">
+        <span className="panel-title">{ctx.hasClientProfile ? "Тоже откликаться как креатор" : "Тоже разместить заказ"}</span>
+      </div>
+      <div className="panel-body">
+        <p className="page-copy" style={{ marginTop: 0 }}>
+          {ctx.hasClientProfile
+            ? "Заведёт анкету креатора на этом же аккаунте — сможете переключаться между кабинетами без повторного входа."
+            : "Заведёт карточку компании на этом же аккаунте — сможете переключаться между кабинетами без повторного входа."}
+        </p>
+        {ctx.hasClientProfile ? (
+          <>
+            <div className="form-grid">
+              <div className="form-row"><label>Имя</label><input name="firstName" required minLength={1} defaultValue={defaultFirstName || ""} /></div>
+              <div className="form-row"><label>Фамилия</label><input name="lastName" required minLength={1} defaultValue={defaultLastName || ""} /></div>
+            </div>
+            <div className="form-grid">
+              <div className="form-row">
+                <label>Категория</label>
+                <SelectControl name="category" defaultValue="Дизайн">
+                  <option>Дизайн</option>
+                  <option>Видео</option>
+                  <option>Тексты</option>
+                  <option>Маркетинг</option>
+                  <option>Креатив</option>
+                  <option>AI</option>
+                  <option>Менеджмент</option>
+                </SelectControl>
+              </div>
+              <div className="form-row">
+                <label>Основная специализация</label>
+                <input name="primaryRole" required minLength={2} list="activation-specialization-suggestions" placeholder="Выберите из списка или впишите свою" />
+                <datalist id="activation-specialization-suggestions">
+                  {SPECIALIZATION_SUGGESTIONS.map((item) => <option value={item} key={item} />)}
+                </datalist>
+              </div>
+            </div>
+            <div className="form-row"><label>Опыт, лет</label><input name="experienceYears" type="number" min={0} required defaultValue={1} /></div>
+          </>
+        ) : (
+          <>
+            <div className="form-row"><label>Компания</label><input name="companyName" required minLength={2} placeholder="Название компании" /></div>
+            <div className="form-grid">
+              <div className="form-row"><label>Сфера деятельности</label><input name="industry" required minLength={2} placeholder="Например, Fashion / E-commerce" /></div>
+              <div className="form-row"><label>Контактное лицо</label><input name="contactName" required minLength={2} defaultValue={ctx.user.name} /></div>
+            </div>
+          </>
+        )}
+        <button className="btn wine" disabled={busy} style={{ marginTop: 12 }}>{busy ? "Активируем..." : "Активировать"}</button>
+      </div>
+    </form>
   );
 }

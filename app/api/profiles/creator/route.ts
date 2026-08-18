@@ -1,10 +1,62 @@
 import { Role } from "@prisma/client";
 import { z } from "zod";
-import { ok, fail } from "@/lib/api";
+import { ok, fail, ApiError } from "@/lib/api";
 import { getFeatureFlags } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 import { refreshCreatorScore } from "@/lib/rating";
 import { requireUser } from "@/lib/session";
+
+const activateSchema = z.object({
+  firstName: z.string().trim().min(1, "Укажите имя").max(60),
+  lastName: z.string().trim().min(1, "Укажите фамилию").max(60),
+  category: z.string().trim().min(2, "Выберите категорию"),
+  primaryRole: z.string().trim().min(2, "Укажите специализацию"),
+  experienceYears: z.coerce.number().int().min(0).max(60)
+});
+
+// Активация роли креатора на уже существующем аккаунте — симметрично
+// POST /api/profiles/client (см. её комментарий). Например, заказчик,
+// который хочет тоже откликаться на заказы как исполнитель.
+export async function POST(request: Request) {
+  try {
+    const user = await requireUser();
+    if (user.creatorProfile) throw new ApiError(409, "У вас уже есть анкета креатора");
+
+    const body = activateSchema.parse(await request.json());
+    const flags = await getFeatureFlags();
+    const status = flags.moderationRequired ? "MODERATION" : flags.paymentsRequired ? "PAYMENT_PENDING" : "APPROVED";
+    const isApproved = !flags.moderationRequired && !flags.paymentsRequired;
+
+    const profile = await prisma.creatorProfile.create({
+      data: {
+        userId: user.id,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        category: body.category,
+        primaryRole: body.primaryRole,
+        level: "Middle",
+        experienceYears: body.experienceYears,
+        expertise: [],
+        bio: "Анкета заполнена частично при активации роли. Остальные поля можно дополнить в кабинете.",
+        workFormat: "Проект",
+        availability: "available",
+        minBudget: 0,
+        telegramContact: user.telegramUsername ? `@${user.telegramUsername}` : null,
+        status,
+        moderationStage: "REGISTRATION",
+        membershipPaid: false,
+        isApproved,
+        score: 70
+      }
+    });
+
+    await refreshCreatorScore(profile.id);
+
+    return ok({ profile }, { status: 201 });
+  } catch (error) {
+    return fail(error);
+  }
+}
 
 const schema = z.object({
   firstName: z.string().min(1),

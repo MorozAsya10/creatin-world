@@ -524,6 +524,54 @@ img.avatar {
   text-transform: uppercase;
 }
 
+/* Переключатель "Кабинет: Креатор / Заказчик" — виден только если у
+   аккаунта есть оба профиля (см. hasCreatorProfile/hasClientProfile в
+   PlatformShell.tsx). Если есть только один — вместо переключателя
+   показывается cabinet-switch-add, ведущая на активацию второй роли. */
+.cabinet-switch {
+  display: flex;
+  border: 1px solid var(--control-border);
+  margin-bottom: 18px;
+}
+
+.cabinet-switch button {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 9px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cabinet-switch button + button {
+  border-left: 1px solid var(--control-border);
+}
+
+.cabinet-switch button.active {
+  background: var(--wine);
+  color: #fff;
+}
+
+.cabinet-switch-add {
+  display: block;
+  width: 100%;
+  border: 1px dashed var(--control-border);
+  background: transparent;
+  color: var(--muted);
+  margin-bottom: 18px;
+  padding: 9px 10px;
+  text-align: left;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cabinet-switch-add:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
 .side-group {
   margin-bottom: 18px;
 }

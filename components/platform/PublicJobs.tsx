@@ -62,9 +62,9 @@ export function PublicJobs() {
               <Link
                 className="btn"
                 style={{ marginTop: 12 }}
-                href={user?.role === "CREATOR" ? "/platform?pane=jobs" : user ? "/platform" : "/login?role=creator"}
+                href={user?.creatorProfile ? "/platform?pane=jobs" : user ? "/platform" : "/login?role=creator"}
               >
-                {user?.role === "CREATOR" ? "Откликнуться в кабинете" : user ? "Открыть кабинет" : "Войти, чтобы откликнуться"}
+                {user?.creatorProfile ? "Откликнуться в кабинете" : user ? "Открыть кабинет" : "Войти, чтобы откликнуться"}
               </Link>
             </div>
           ))
