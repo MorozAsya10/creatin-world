@@ -6,6 +6,7 @@ import { LayoutDashboard, LogOut } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { ThemeControl } from "@/components/ui/ThemeControl";
+import { ADMIN_PANEL_ROUTE } from "@/lib/admin-route";
 import type { ApiUser } from "@/lib/types";
 
 function roleLabel(role?: string) {
@@ -70,11 +71,20 @@ export function Header() {
           </>
         ) : (
           <>
-            {user.role === "ADMIN" ? null : (
+            {/* Скрываем "Кабинет" только у "чистого" админа — без анкеты
+                креатора/заказчика туда всё равно нечего показывать (см. тот
+                же isPureAdmin в app/platform/page.tsx). Админ с профилем
+                (см. lib/session.ts про dual-role) продолжает видеть кнопку. */}
+            {user.role === "ADMIN" && !user.creatorProfile && !user.clientProfile ? null : (
               <Link className="btn header-cabinet" href="/platform" aria-label="Кабинет">
                 <LayoutDashboard size={16} /><span>Кабинет</span>
               </Link>
             )}
+            {user.role === "ADMIN" ? (
+              <Link className="btn header-cabinet" href={ADMIN_PANEL_ROUTE} aria-label="Админка">
+                Админка
+              </Link>
+            ) : null}
             <span className="role-pill">{roleLabel(user.role)}</span>
             <Avatar name={user.name} photoUrl={user.creatorProfile?.photoUrl} />
             <button className="btn ghost icon" onClick={logout} title="Выйти" aria-label="Выйти">
