@@ -178,7 +178,12 @@ export function CreatorCatalog({ scope = "public", canSeeContacts = false, rende
                   </h3>
                   <div className="meta">{creator.primaryRole}</div>
                 </div>
-                <span className="score">{creator.score}%</span>
+                {/* Единый индекс креатора (0-100%) — составной: заполненность
+                    профиля + активность на платформе + доля заказчиков,
+                    готовых рекомендовать (см. lib/rating.ts). Отдельного
+                    счётчика "рекомендуют N из M" больше нет — он входил бы в
+                    этот же индекс, а не показывался бы рядом. */}
+                <span className="score" title="Индекс: заполненность анкеты + активность + рекомендации заказчиков">{creator.score}%</span>
               </div>
               <p>{creator.bio}</p>
               <div>

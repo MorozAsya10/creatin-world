@@ -32,7 +32,7 @@ import { CreatorProfileDialog } from "@/components/catalog/CreatorProfileDialog"
 import { Avatar } from "@/components/ui/Avatar";
 import { SelectControl } from "@/components/ui/SelectControl";
 import { ThemeControl } from "@/components/ui/ThemeControl";
-import { formatFileSize, orderInitiatorLabel, statusLabel } from "@/lib/presentation";
+import { SPECIALIZATION_SUGGESTIONS, formatFileSize, orderInitiatorLabel, statusLabel } from "@/lib/presentation";
 import type {
   ApiUser,
   Application,
@@ -41,6 +41,7 @@ import type {
   FeatureFlags,
   Invitation,
   Order,
+  OrderPosition,
   PackagePlan
 } from "@/lib/types";
 
@@ -650,10 +651,16 @@ function CreatorOnboarding(ctx: PaneContext) {
               <h3>Специализация</h3>
               <div className="form-grid">
                 <div className="form-row"><label>Категория</label><SelectControl name="category" defaultValue={profile?.category || "Дизайн"}><option>Дизайн</option><option>Видео</option><option>Креатив</option><option>AI</option><option>Маркетинг</option></SelectControl></div>
-                <div className="form-row"><label>Основная роль</label><input name="primaryRole" defaultValue={profile?.primaryRole || "Motion / 3D designer"} /></div>
+                <div className="form-row">
+                  <label>Основная роль</label>
+                  <input name="primaryRole" list="profile-specialization-suggestions" defaultValue={profile?.primaryRole || "Motion / 3D designer"} />
+                  <datalist id="profile-specialization-suggestions">
+                    {SPECIALIZATION_SUGGESTIONS.map((item) => <option value={item} key={item} />)}
+                  </datalist>
+                </div>
                 <div className="form-row"><label>Уровень</label><SelectControl name="level" defaultValue={profile?.level || "Senior"}><option>Junior</option><option>Middle</option><option>Senior</option></SelectControl></div>
                 <div className="form-row"><label>Опыт, лет</label><input name="experienceYears" type="number" defaultValue={profile?.experienceYears || 7} /></div>
-                <div className="form-row full"><label>Экспертиза через запятую</label><textarea name="expertise" defaultValue={(profile?.expertise || ["3D", "Motion", "Fashion"]).join(", ")} /></div>
+                <div className="form-row full"><label>Дополнительные навыки через запятую</label><textarea name="expertise" defaultValue={(profile?.expertise || ["3D", "Motion", "Fashion"]).join(", ")} placeholder="То, что умеешь помимо основной роли — теги через запятую" /></div>
               </div>
             </div>
             <div className="form-section">
@@ -678,29 +685,34 @@ function CreatorOnboarding(ctx: PaneContext) {
   );
 }
 
+// Вакансия — одна позиция, отклик выглядит как раньше (одна кнопка на весь
+// пост). Проект — своя кнопка/статус на каждую позицию (включая
+// волонтёрскую, если заказчик её открыл), поэтому цель отклика — не сам
+// заказ, а конкретная позиция внутри него (см. OrderPosition в lib/types.ts).
 function CreatorJobs(ctx: PaneContext) {
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const appliedByOrder = new Map(
+  const [selectedTarget, setSelectedTarget] = useState<{ order: Order; position: OrderPosition } | null>(null);
+  const appliedByPosition = new Map(
     ctx.applications
-      .filter((application) => application.order)
-      .map((application) => [application.order!.id, application])
+      .filter((application) => application.positionId)
+      .map((application) => [application.positionId as string, application])
   );
 
   async function apply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedOrder) return;
+    if (!selectedTarget) return;
     const form = new FormData(event.currentTarget);
     ctx.setBusy(true);
     try {
       const price = Number(form.get("price"));
-      const response = await fetch(`/api/orders/${selectedOrder.id}/applications`, {
+      const response = await fetch(`/api/orders/${selectedTarget.order.id}/applications`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           message: String(form.get("message")),
           relevantCase: String(form.get("relevantCase")),
           priceCents: price > 0 ? price * 100 : undefined,
-          duration: String(form.get("duration"))
+          duration: String(form.get("duration")),
+          positionId: selectedTarget.position.id
         })
       });
       if (!response.ok) {
@@ -715,20 +727,27 @@ function CreatorJobs(ctx: PaneContext) {
     }
   }
 
+  function positionAction(order: Order, position: OrderPosition) {
+    const application = appliedByPosition.get(position.id);
+    return application
+      ? <span className="status ok">{statusLabel(application.status)}</span>
+      : <button className="btn wine" type="button" onClick={() => setSelectedTarget({ order, position })} disabled={ctx.busy}>{position.isVolunteer ? "Откликнуться волонтёром" : "Откликнуться"}</button>;
+  }
+
   return (
     <>
       <div className="page-head">
-        <div><h2 className="page-title">Вакансии</h2><p className="page-copy">Отклик доступен участнику платформы и создает основу для чата внутри заказа.</p></div>
+        <div><h2 className="page-title">Вакансии</h2><p className="page-copy">Отклик доступен участнику платформы и создает основу для чата внутри заказа. В проектах — своя кнопка на каждую позицию.</p></div>
       </div>
-      {selectedOrder ? (
+      {selectedTarget ? (
         <form className="panel application-form" onSubmit={apply}>
-          <div className="panel-head"><span className="panel-title">Отклик на {selectedOrder.publicId}</span><button className="btn ghost" type="button" onClick={() => setSelectedOrder(null)}>Отмена</button></div>
+          <div className="panel-head"><span className="panel-title">Отклик на {selectedTarget.order.publicId}{selectedTarget.order.kind === "PROJECT" ? ` · ${selectedTarget.position.title}` : ""}</span><button className="btn ghost" type="button" onClick={() => setSelectedTarget(null)}>Отмена</button></div>
           <div className="panel-body">
             <div className="form-row"><label>Почему вы подходите</label><textarea name="message" minLength={10} required defaultValue="Подходит мой опыт и портфолио. Готов(а) обсудить бриф и показать релевантные кейсы." /></div>
             <div className="form-grid">
               <div className="form-row"><label>Релевантный кейс</label><input name="relevantCase" type="url" defaultValue={ctx.user.creatorProfile?.portfolioUrl || ""} /></div>
               <div className="form-row"><label>Стоимость, ₽</label><input name="price" type="number" min="1" defaultValue={ctx.user.creatorProfile?.minBudget || 100000} /></div>
-              <div className="form-row"><label>Срок</label><input name="duration" required defaultValue={selectedOrder.deadline} /></div>
+              <div className="form-row"><label>Срок</label><input name="duration" required defaultValue={selectedTarget.order.deadline} /></div>
             </div>
             <button className="btn wine" disabled={ctx.busy}>{ctx.busy ? "Отправляем..." : "Отправить отклик"}</button>
           </div>
@@ -736,10 +755,18 @@ function CreatorJobs(ctx: PaneContext) {
       ) : null}
       <div className="panel"><div className="panel-body">
         {ctx.orders.length ? ctx.orders.map((order) => {
-          const application = appliedByOrder.get(order.id);
-          return <JobSnippet key={order.id} order={order} action={application
-            ? <span className="status ok">{statusLabel(application.status)}</span>
-            : <button className="btn wine" type="button" onClick={() => setSelectedOrder(order)} disabled={ctx.busy}>Откликнуться</button>} />;
+          const positions = order.positions || [];
+          const action = !positions.length ? null : order.kind === "PROJECT" ? (
+            <div className="position-actions">
+              {positions.map((position) => (
+                <div className="position-action-row" key={position.id}>
+                  <span className="position-name">{position.title}{position.isVolunteer ? <span className="chip">волонтёр</span> : null}</span>
+                  {positionAction(order, position)}
+                </div>
+              ))}
+            </div>
+          ) : positionAction(order, positions[0]);
+          return <JobSnippet key={order.id} order={order} action={action} />;
         }) : <div className="empty compact">Опубликованных вакансий пока нет.</div>}
       </div></div>
     </>
@@ -828,7 +855,10 @@ function InvitesPane(ctx: PaneContext) {
 // заданы здесь константами. Оплата всё равно идёт через тот же
 // /api/payments/test (purpose: "creator_membership") и включает
 // membershipPaid на CreatorProfile, см. lib/payments.ts.
-const CREATOR_SUBSCRIPTION_PRICE_CENTS = 490000;
+// 500 ₽/мес — ориентир с планирования: посмотрели цены аналогов
+// (HH/Хирихи/Herify и т.п. — там подписки в районе 500 ₽), выше смысла
+// ставить нет, единый тариф без скрытых условий.
+const CREATOR_SUBSCRIPTION_PRICE_CENTS = 50000;
 
 const CREATOR_SUBSCRIPTION_PERKS = [
   "Профиль виден заказчикам в открытой ленте креаторов",
@@ -996,10 +1026,37 @@ function CompanyOnboarding(ctx: PaneContext) {
   );
 }
 
+// Вакансия — один отклик на весь пост (ищем одного специалиста). Проект —
+// сборка команды: заказчик перечисляет несколько именованных позиций, у
+// каждой свой независимый отклик (см. OrderKind/OrderPosition в
+// schema.prisma). Переключатель ниже меняет и вид формы (поле "Название"
+// вместо этого становится общим заголовком проекта), и то, что уходит в
+// POST /api/orders.
 function NewOrderPane(ctx: PaneContext) {
+  const [kind, setKind] = useState<"VACANCY" | "PROJECT">("VACANCY");
+  const [positions, setPositions] = useState<string[]>(["", ""]);
+  const [acceptsVolunteers, setAcceptsVolunteers] = useState(false);
+
+  function updatePosition(index: number, value: string) {
+    setPositions((prev) => prev.map((item, i) => (i === index ? value : item)));
+  }
+
+  function addPosition() {
+    setPositions((prev) => [...prev, ""]);
+  }
+
+  function removePosition(index: number) {
+    setPositions((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const cleanPositions = positions.map((title) => title.trim()).filter(Boolean);
+    if (kind === "PROJECT" && cleanPositions.length === 0) {
+      ctx.showToast("Добавьте хотя бы одну позицию для проекта");
+      return;
+    }
     ctx.setBusy(true);
     try {
       const response = await fetch("/api/orders", {
@@ -1012,7 +1069,10 @@ function NewOrderPane(ctx: PaneContext) {
           requirements: String(form.get("requirements")),
           budget: String(form.get("budget")),
           deadline: String(form.get("deadline")),
-          initiator: String(form.get("initiator"))
+          initiator: String(form.get("initiator")),
+          kind,
+          positions: kind === "PROJECT" ? cleanPositions : undefined,
+          acceptsVolunteers: kind === "PROJECT" && acceptsVolunteers
         })
       });
       if (!response.ok) {
@@ -1037,11 +1097,43 @@ function NewOrderPane(ctx: PaneContext) {
     <>
       <div className="page-head"><div><h2 className="page-title">Создать заказ</h2><p className="page-copy">Опишите задачу и укажите, от чьего имени опубликован запрос.</p></div></div>
       <form className="panel" onSubmit={submit}><div className="panel-body">
-        <div className="form-grid"><div className="form-row"><label>Название</label><input name="title" minLength={3} required placeholder="Например, айдентика для нового бренда" /></div><div className="form-row"><label>Категория</label><SelectControl name="category" defaultValue="Дизайн"><option>Дизайн</option><option>Видео</option><option>Тексты</option><option>Маркетинг</option><option>Креатив</option><option>AI</option><option>Менеджмент</option></SelectControl></div></div>
+        <div className="form-row">
+          <label>Тип поста</label>
+          <div className="segmented-control" role="radiogroup" aria-label="Тип поста">
+            <button type="button" className={kind === "VACANCY" ? "active" : ""} onClick={() => setKind("VACANCY")}>Вакансия · один отклик</button>
+            <button type="button" className={kind === "PROJECT" ? "active" : ""} onClick={() => setKind("PROJECT")}>Проект · сборка команды</button>
+          </div>
+          <p className="field-hint">{kind === "VACANCY" ? "Ищете одного специалиста — на пост будет одна кнопка отклика." : "Заведите несколько позиций (например, «Дизайнер», «Копирайтер») — у каждой своя кнопка отклика."}</p>
+        </div>
+        <div className="form-grid"><div className="form-row"><label>{kind === "VACANCY" ? "Название" : "Название проекта"}</label><input name="title" minLength={3} maxLength={150} required placeholder="Например, айдентика для нового бренда" /></div><div className="form-row"><label>Категория</label><SelectControl name="category" defaultValue="Дизайн"><option>Дизайн</option><option>Видео</option><option>Тексты</option><option>Маркетинг</option><option>Креатив</option><option>AI</option><option>Менеджмент</option></SelectControl></div></div>
+        {kind === "PROJECT" ? (
+          <div className="form-row">
+            <label>Позиции проекта</label>
+            <div className="position-list">
+              {positions.map((title, index) => (
+                <div className="position-row" key={index}>
+                  <input
+                    value={title}
+                    maxLength={120}
+                    placeholder={`Например, «${index === 0 ? "Дизайнер" : "Копирайтер"}»`}
+                    onChange={(event) => updatePosition(index, event.target.value)}
+                  />
+                  <button type="button" className="btn ghost icon" onClick={() => removePosition(index)} disabled={positions.length <= 1} aria-label="Убрать позицию">×</button>
+                </div>
+              ))}
+            </div>
+            <button type="button" className="btn ghost" onClick={addPosition}>+ Добавить позицию</button>
+            <label className="checkbox-row">
+              <input type="checkbox" checked={acceptsVolunteers} onChange={(event) => setAcceptsVolunteers(event.target.checked)} />
+              <span>Разрешить волонтёрские отклики (без оплаты, для портфолио)</span>
+            </label>
+          </div>
+        ) : null}
         <div className="form-row"><label>От кого заказ</label><SelectControl name="initiator" defaultValue="CLIENT"><option value="CLIENT">От заказчика</option><option value="CREATOR">От креатора</option></SelectControl></div>
-        <div className="form-row"><label>Описание и ожидаемый результат</label><textarea name="description" minLength={10} required placeholder="Опишите задачу, контекст и ожидаемый результат" /></div>
-        <div className="form-grid"><div className="form-row"><label>Бюджет</label><input name="budget" required placeholder="Например, 180–250 тыс. ₽" /></div><div className="form-row"><label>Срок</label><input name="deadline" required placeholder="Например, 3 недели" /></div></div>
-        <div className="form-row"><label>Требования</label><textarea name="requirements" minLength={3} required placeholder="Опыт, навыки, обязательные материалы" /></div>
+        {/* Лимит по символам — чтобы не превращалось в простыню (см. комментарий у createOrderSchema в app/api/orders/route.ts) */}
+        <div className="form-row"><label>Описание и ожидаемый результат</label><textarea name="description" minLength={10} maxLength={6000} required placeholder="Опишите задачу, контекст и ожидаемый результат (до 6000 символов)" /></div>
+        <div className="form-grid"><div className="form-row"><label>Бюджет</label><input name="budget" maxLength={120} required placeholder="Например, 180–250 тыс. ₽" /></div><div className="form-row"><label>Срок</label><input name="deadline" maxLength={120} required placeholder="Например, 3 недели" /></div></div>
+        <div className="form-row"><label>Требования</label><textarea name="requirements" minLength={3} maxLength={3000} required placeholder="Опыт, навыки, обязательные материалы (до 3000 символов)" /></div>
         <button className="btn wine" disabled={ctx.busy}>{ctx.flags.paymentsRequired ? "Сохранить и перейти к оплате" : ctx.flags.moderationRequired ? "Сохранить и отправить на модерацию" : "Сохранить и опубликовать"}</button>
       </div></form>
     </>
@@ -1081,6 +1173,52 @@ async function payOrderPublication(ctx: PaneContext, order: Order) {
     }
     await ctx.refreshAll();
     ctx.showToast(`Публикация ${order.publicId} оплачена`);
+  } finally {
+    ctx.setBusy(false);
+  }
+}
+
+// Заказчик сам отмечает заказ выполненным (см. PATCH /api/orders/[id] —
+// клиенту разрешён только переход в COMPLETED, остальные статусы — только
+// админ/модерация). Именно это открывает возможность оценить исполнителей
+// (см. recommendApplication ниже).
+async function completeOrder(ctx: PaneContext, order: Order) {
+  ctx.setBusy(true);
+  try {
+    const response = await fetch(`/api/orders/${order.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status: "COMPLETED" })
+    });
+    if (!response.ok) {
+      ctx.showToast(await responseError(response, "Не удалось отметить заказ выполненным"));
+      return;
+    }
+    await ctx.refreshAll();
+    ctx.showToast(`${order.publicId} отмечен выполненным. Теперь можно оценить исполнителей.`);
+  } finally {
+    ctx.setBusy(false);
+  }
+}
+
+// "Рекомендую / не рекомендую" по конкретному отклику — вместо звёздного
+// рейтинга (см. комментарий у Application.clientRecommended в
+// schema.prisma). Доступно только после того, как заказ переведён в
+// COMPLETED (см. completeOrder выше).
+async function recommendApplication(ctx: PaneContext, application: Application, recommended: boolean) {
+  ctx.setBusy(true);
+  try {
+    const response = await fetch(`/api/applications/${application.id}/recommend`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ recommended })
+    });
+    if (!response.ok) {
+      ctx.showToast(await responseError(response, "Не удалось сохранить оценку"));
+      return;
+    }
+    await ctx.refreshAll();
+    ctx.showToast(recommended ? "Отметили: рекомендуете исполнителя" : "Отметили: не рекомендуете исполнителя");
   } finally {
     ctx.setBusy(false);
   }
@@ -1149,6 +1287,9 @@ function ApplicationRow({
         <div className="application-copy">{application.message}</div>
         <div className="job-tags">
           <span className="chip">{creator.primaryRole} · {creator.level}</span>
+          {/* Позиция актуальна только для проекта — у вакансии она одна и
+              так понятна из заголовка заказа, повторять её незачем. */}
+          {application.order?.kind === "PROJECT" && application.position ? <span className="chip">{application.position.title}</span> : null}
           {application.priceCents ? <span className="chip">{formatMoney(application.priceCents)}</span> : null}
           {application.duration ? <span className="chip">{application.duration}</span> : null}
           <span className={`status ${application.chat ? "ok" : "warn"}`}>{statusLabel(application.status)}</span>
@@ -1158,6 +1299,19 @@ function ApplicationRow({
         {showOrderLink && application.order ? <button className="btn" type="button" onClick={() => ctx.openOrder(application.order!.id)}>Заказ</button> : null}
         <button className="btn" type="button" onClick={() => onProfile(creator)}>Профиль</button>
         <button className="btn wine" type="button" onClick={() => void openApplicationChat(ctx, application)} disabled={ctx.busy}>{application.chat ? "Открыть чат" : "Начать чат"}</button>
+        {/* Оценка "рекомендую/не рекомендую" доступна заказчику только после
+            того, как сам заказ отмечен выполненным (см. completeOrder выше) —
+            до этого момента оценивать нечего. */}
+        {ctx.user.role === "CLIENT" && application.order?.status === "COMPLETED" ? (
+          application.clientRecommended === null || application.clientRecommended === undefined ? (
+            <div className="recommend-row">
+              <button className="btn" type="button" onClick={() => void recommendApplication(ctx, application, true)} disabled={ctx.busy}>Рекомендую</button>
+              <button className="btn ghost" type="button" onClick={() => void recommendApplication(ctx, application, false)} disabled={ctx.busy}>Не рекомендую</button>
+            </div>
+          ) : (
+            <span className={`status ${application.clientRecommended ? "ok" : "warn"}`}>{application.clientRecommended ? "Рекомендуете" : "Не рекомендуете"}</span>
+          )
+        ) : null}
       </div>
     </div>
   );
@@ -1192,6 +1346,9 @@ function ClientOrderDetail(ctx: PaneContext) {
           {order.status === "PAYMENT_PENDING" ? (
             <button className="btn wine" type="button" onClick={() => void payOrderPublication(ctx, order)} disabled={ctx.busy}>Оплатить публикацию</button>
           ) : null}
+          {order.status === "PUBLISHED" ? (
+            <button className="btn" type="button" onClick={() => void completeOrder(ctx, order)} disabled={ctx.busy} title="После этого можно будет оценить исполнителей">Отметить выполненным</button>
+          ) : null}
           <button className="btn wine" type="button" onClick={() => void runAiForOrder(ctx, order)} disabled={ctx.busy || aiDisabled}><Bot size={16} /> {order.aiMatches?.length ? "Обновить AI-топ-3" : "Подобрать AI-топ-3"}</button>
         </div>
       </div>
@@ -1215,7 +1372,24 @@ function ClientOrderDetail(ctx: PaneContext) {
       <div className="panel order-responses">
         <div className="panel-head"><span className="panel-title">Все отклики на {order.publicId}</span><span className="result-count">{orderApplications.length}</span></div>
         <div className="panel-body">
-          {orderApplications.length ? orderApplications.map((application) => <ApplicationRow key={application.id} application={application} ctx={ctx} onProfile={setSelectedCreator} />) : <div className="empty compact">На этот заказ откликов пока нет.</div>}
+          {!orderApplications.length ? (
+            <div className="empty compact">На этот заказ откликов пока нет.</div>
+          ) : order.kind === "PROJECT" && order.positions?.length ? (
+            // Проект — группируем отклики по позициям (сборка команды), а
+            // не показываем их одной общей лентой, чтобы было видно, кто
+            // на какую роль откликнулся.
+            order.positions.map((position) => {
+              const positionApplications = orderApplications.filter((application) => application.positionId === position.id);
+              return (
+                <div className="position-group" key={position.id}>
+                  <div className="position-group-head">{position.title}{position.isVolunteer ? <span className="chip">волонтёр</span> : null}<span className="result-count">{positionApplications.length}</span></div>
+                  {positionApplications.length ? positionApplications.map((application) => <ApplicationRow key={application.id} application={application} ctx={ctx} onProfile={setSelectedCreator} />) : <div className="empty compact">На эту позицию откликов пока нет.</div>}
+                </div>
+              );
+            })
+          ) : (
+            orderApplications.map((application) => <ApplicationRow key={application.id} application={application} ctx={ctx} onProfile={setSelectedCreator} />)
+          )}
         </div>
       </div>
       <CreatorProfileDialog creator={selectedCreator} canSeeContacts onClose={() => setSelectedCreator(null)} />

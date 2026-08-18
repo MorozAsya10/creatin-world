@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { SelectControl } from "@/components/ui/SelectControl";
+import { SPECIALIZATION_SUGGESTIONS } from "@/lib/presentation";
 
 type LoginRole = "creator" | "client";
 type AuthMode = "login" | "register";
@@ -70,7 +71,14 @@ function CreatorRegistrationFields() {
             <option>Менеджмент</option>
           </SelectControl>
         </div>
-        <div className="form-row"><label>Роль</label><input name="primaryRole" required minLength={2} placeholder="Например, Motion designer" /></div>
+        <div className="form-row">
+          <label>Основная специализация</label>
+          <input name="primaryRole" required minLength={2} list="specialization-suggestions" placeholder="Выберите из списка или впишите свою" />
+          <datalist id="specialization-suggestions">
+            {SPECIALIZATION_SUGGESTIONS.map((item) => <option value={item} key={item} />)}
+          </datalist>
+          <small className="field-hint">Одна сильная сторона, а не всё подряд — остальные навыки добавите в профиле позже.</small>
+        </div>
       </div>
       <div className="form-grid">
         <div className="form-row"><label>Опыт, лет</label><input name="experienceYears" type="number" min={0} required defaultValue={1} /></div>

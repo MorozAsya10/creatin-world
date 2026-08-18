@@ -74,6 +74,17 @@ enum OrderInitiator {
   CREATOR
 }
 
+// Вакансия — один отклик на весь заказ (ищем одного специалиста). Проект —
+// сборка команды: заказчик заводит несколько именованных позиций, на каждую
+// свой независимый отклик (см. OrderPosition). Даже у вакансии всегда есть
+// ровно одна позиция — так POST /api/orders/[id]/applications и уникальный
+// индекс Application@@unique работают одинаково для обоих случаев, без
+// специального ветвления по kind.
+enum OrderKind {
+  VACANCY
+  PROJECT
+}
+
 enum ApplicationStatus {
   SENT
   VIEWED
@@ -228,11 +239,18 @@ model Order {
   deadline           String
   initiator          OrderInitiator @default(CLIENT)
   status             OrderStatus   @default(DRAFT)
+  kind               OrderKind     @default(VACANCY)
+  // Только для kind=PROJECT: если true, при публикации/редактировании к
+  // позициям добавляется ещё одна служебная "Волонтёр" (OrderPosition с
+  // isVolunteer=true) — отклик на неё доступен без оплаты/пакета, см.
+  // комментарий у OrderPosition.isVolunteer.
+  acceptsVolunteers  Boolean       @default(false)
   paymentRequired    Boolean       @default(false)
   moderationRequired Boolean       @default(false)
   publishedAt        DateTime?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
+  positions          OrderPosition[]
   applications       Application[]
   invitations        Invitation[]
   aiMatches          AiMatch[]
@@ -241,22 +259,55 @@ model Order {
   chats              Chat[]
 }
 
-model Application {
-  id               String            @id @default(cuid())
-  orderId          String
-  order            Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  creatorProfileId String
-  creatorProfile   CreatorProfile    @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
-  status           ApplicationStatus @default(SENT)
-  message          String
-  relevantCase     String?
-  priceCents       Int?
-  duration         String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  chat             Chat?
+// Позиция внутри заказа — единица, на которую реально откликается креатор.
+// У вакансии (Order.kind=VACANCY) ровно одна позиция, создаётся автоматически
+// вместе с заказом (title дублирует Order.title) — так отклик на вакансию
+// технически ничем не отличается от отклика на позицию проекта. У проекта
+// (kind=PROJECT) заказчик заводит несколько позиций сам (например,
+// "Дизайнер", "Копирайтер", "Монтажёр") — на каждую свой независимый пул
+// откликов, что и даёт "сборку команды" одним постом.
+model OrderPosition {
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  title   String
+  // Служебная волонтёрская позиция (см. Order.acceptsVolunteers): отклик
+  // бесплатный/без привязки к пакету заказчика, для наработки портфолио —
+  // см. обсуждение "откликнуться как волонтёр" на планировании.
+  isVolunteer  Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  applications Application[]
+}
 
-  @@unique([orderId, creatorProfileId])
+// clientRecommended — не звёздный рейтинг (обсуждали и намеренно отказались:
+// одна спорная "двойка" несправедливо тянет вниз весь профиль), а простой
+// да/нет по завершённому заказу: "готов ли заказчик рекомендовать этого
+// исполнителя". null — заказчик ещё не оценивал (в т.ч. пока заказ не
+// COMPLETED). Публично показывается только агрегат "N заказов оценено, M
+// рекомендуют" (см. GET /api/creators) — конкретные негативные оценки
+// нигде не выводятся текстом, чтобы не превращать это в публичный спор.
+model Application {
+  id                String            @id @default(cuid())
+  orderId           String
+  order             Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // Позиция внутри заказа, на которую именно откликнулись (см. OrderPosition).
+  // orderId дублируется намеренно — удобно для заказ-скоуп запросов (лента
+  // откликов по заказу и т.п.) без лишнего join через position.
+  positionId        String
+  position          OrderPosition     @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  creatorProfileId  String
+  creatorProfile    CreatorProfile    @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  status            ApplicationStatus @default(SENT)
+  message           String
+  relevantCase      String?
+  priceCents        Int?
+  duration          String?
+  clientRecommended Boolean?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  chat              Chat?
+
+  @@unique([positionId, creatorProfileId])
 }
 
 model Invitation {

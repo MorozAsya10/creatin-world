@@ -20,7 +20,7 @@ export async function PATCH(
     const body = schema.parse(await request.json());
     const invitation = await prisma.invitation.findUnique({
       where: { id },
-      include: { order: true }
+      include: { order: { include: { positions: true } } }
     });
 
     if (!invitation) throw new ApiError(404, "Приглашение не найдено");
@@ -39,18 +39,23 @@ export async function PATCH(
 
       // Принятое приглашение автоматически создаёт отклик от лица
       // креатора — так чат/дальнейшая работа с этим кандидатом идут по
-      // тому же пути (через Application), что и обычный самостоятельный отклик.
-      if (body.status === "ACCEPTED") {
+      // тому же пути (через Application), что и обычный самостоятельный
+      // отклик. Приглашение адресовано заказу в целом, без выбора
+      // конкретной позиции проекта, поэтому используем первую позицию
+      // заказа (у вакансии она и так единственная).
+      const position = invitation.order.positions[0];
+      if (body.status === "ACCEPTED" && position) {
         await tx.application.upsert({
           where: {
-            orderId_creatorProfileId: {
-              orderId: invitation.orderId,
+            positionId_creatorProfileId: {
+              positionId: position.id,
               creatorProfileId: invitation.creatorProfileId
             }
           },
           update: {},
           create: {
             orderId: invitation.orderId,
+            positionId: position.id,
             creatorProfileId: invitation.creatorProfileId,
             status: "SENT",
             message: `Принимаю приглашение на заказ «${invitation.order.title}». Готов(а) обсудить детали.`,

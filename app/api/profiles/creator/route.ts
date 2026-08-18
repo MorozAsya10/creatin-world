@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { getFeatureFlags } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
+import { refreshCreatorScore } from "@/lib/rating";
 import { requireUser } from "@/lib/session";
 
 const schema = z.object({
@@ -62,6 +63,10 @@ export async function PUT(request: Request) {
         }
       });
     });
+
+    // Заполненность анкеты — один из компонентов индекса (см. lib/rating.ts),
+    // поэтому пересчитываем сразу после сохранения профиля.
+    await refreshCreatorScore(profile.id);
 
     return ok({ profile });
   } catch (error) {

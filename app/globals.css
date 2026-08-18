@@ -654,6 +654,28 @@ img.avatar {
   font-weight: 800;
 }
 
+/* Группа откликов на одну позицию проекта (ClientOrderDetail) — заголовок
+   с названием позиции + счётчиком, сама лента откликов ниже (ApplicationRow
+   переиспользуется как есть). */
+.position-group {
+  margin-bottom: 22px;
+}
+
+.position-group:last-child {
+  margin-bottom: 0;
+}
+
+.position-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
 .summary {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -822,6 +844,37 @@ img.avatar {
   gap: 8px;
 }
 
+/* Проект (JobSnippet, CreatorJobs): у каждой позиции своя строка со
+   статусом/кнопкой отклика — в отличие от вакансии, где на весь пост одна
+   кнопка. */
+.position-actions {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.position-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.position-action-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.position-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 13px;
+}
+
 .profile-card {
   border: 1px solid var(--line);
   background: var(--surface);
@@ -936,6 +989,70 @@ img.avatar {
 
 .form-row.full {
   grid-column: 1 / -1;
+}
+
+/* Пояснительный текст под полем формы (например, у "Основная специализация"
+   в анкете креатора) — мельче и приглушённее подписи label. */
+.field-hint {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Переключатель Вакансия/Проект в форме создания заказа (NewOrderPane) —
+   два равнозначных варианта, не выпадающий список, чтобы разница была
+   видна сразу. */
+.segmented-control {
+  display: flex;
+  border: 1px solid var(--control-border);
+}
+
+.segmented-control button {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 11px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.segmented-control button + button {
+  border-left: 1px solid var(--control-border);
+}
+
+.segmented-control button.active {
+  background: var(--wine);
+  color: #fff;
+}
+
+/* Список позиций проекта (NewOrderPane, kind=PROJECT) — по одной строке на
+   позицию с полем ввода и кнопкой удаления. */
+.position-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.position-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: auto;
 }
 
 label {
@@ -1278,6 +1395,13 @@ textarea {
   flex-wrap: wrap;
   gap: 7px;
   margin-left: auto;
+}
+
+/* Кнопки "Рекомендую / Не рекомендую" в ApplicationRow — тот же ряд, что и
+   остальные действия, просто отдельная группа для читаемости. */
+.recommend-row {
+  display: flex;
+  gap: 7px;
 }
 
 .application-main {

@@ -72,13 +72,14 @@ export async function POST(request: Request) {
       throw new ApiError(404, "Креатор не найден");
     }
 
-    const existingApplication = await prisma.application.findUnique({
-      where: {
-        orderId_creatorProfileId: {
-          orderId: order.id,
-          creatorProfileId: creator.id
-        }
-      }
+    // orderId на Application остался как обычное (не уникальное) поле — у
+    // проекта с несколькими позициями один креатор теоретически может
+    // откликнуться на несколько позиций одного заказа, поэтому здесь ищем
+    // любой отклик этого креатора в рамках заказа через findFirst, а не по
+    // композитному уникальному ключу (тот теперь [positionId,
+    // creatorProfileId], см. schema.prisma).
+    const existingApplication = await prisma.application.findFirst({
+      where: { orderId: order.id, creatorProfileId: creator.id }
     });
     if (existingApplication) {
       throw new ApiError(409, "Креатор уже откликнулся на этот заказ");

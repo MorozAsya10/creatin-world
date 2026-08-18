@@ -42,6 +42,13 @@ export type CreatorProfile = {
   isApproved: boolean;
   user?: ApiUser;
   files?: PortfolioFile[];
+  // Агрегаты по Application.clientRecommended — считаются на бэке в
+  // GET /api/creators (см. lib/types.ts:: комментарий у Application ниже).
+  // reviewedOrdersCount — сколько завершённых заказов заказчики уже оценили,
+  // recommendedCount — из них сколько сказали "рекомендую". Оба undefined,
+  // если бэкенд их не прислал (например, в других API-ответах).
+  reviewedOrdersCount?: number;
+  recommendedCount?: number;
 };
 
 export type PortfolioFile = {
@@ -91,11 +98,25 @@ export type Order = {
   deadline: string;
   initiator: "CLIENT" | "CREATOR";
   status: string;
+  // VACANCY — один отклик на весь заказ; PROJECT — несколько именованных
+  // позиций, на каждую свой отклик (сборка команды), см. OrderPosition.
+  kind: "VACANCY" | "PROJECT";
+  acceptsVolunteers: boolean;
+  positions?: OrderPosition[];
   clientProfile?: ClientProfile;
   _count?: { applications: number };
   applications?: Application[];
   aiMatches?: AiMatch[];
   invitations?: Invitation[];
+};
+
+// Позиция внутри заказа — то, на что реально откликается креатор (см.
+// комментарий у Order.kind). У вакансии всегда ровно одна.
+export type OrderPosition = {
+  id: string;
+  title: string;
+  isVolunteer: boolean;
+  applications?: Application[];
 };
 
 export type Application = {
@@ -105,6 +126,12 @@ export type Application = {
   relevantCase?: string | null;
   priceCents?: number | null;
   duration?: string | null;
+  // null = заказчик пока не оценивал (или заказ ещё не завершён);
+  // true/false — оценка "рекомендую"/"не рекомендую", см. POST
+  // /api/applications/[id]/recommend.
+  clientRecommended?: boolean | null;
+  positionId?: string;
+  position?: OrderPosition;
   order?: Order;
   creatorProfile?: CreatorProfile;
   chat?: Chat | null;

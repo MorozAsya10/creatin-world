@@ -53,9 +53,15 @@ export function CreatorProfileDialog({ creator, canSeeContacts = false, onClose 
               <p>{creator.primaryRole} · {creator.level}</p>
             </div>
           </div>
-          <button className="btn ghost icon" type="button" onClick={onClose} aria-label="Закрыть профиль">
-            <X size={18} />
-          </button>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {/* Единый индекс креатора — заполненность профиля + активность +
+                доля заказчиков, готовых рекомендовать (см. lib/rating.ts),
+                а не отдельная звёздочка/счётчик отзывов. */}
+            <span className="score" title="Индекс: заполненность анкеты + активность + рекомендации заказчиков">{creator.score}%</span>
+            <button className="btn ghost icon" type="button" onClick={onClose} aria-label="Закрыть профиль">
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         <div className="profile-dialog-body">

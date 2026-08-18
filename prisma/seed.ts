@@ -4,7 +4,7 @@
 // creator-fixtures.ts, тестовые заказы/партнёры). Использовать при первом
 // разворачивании проекта или чтобы сбросить БД в чистое демо-состояние —
 // НЕ инкрементальный, старые демо-записи не сохраняются.
-import { PrismaClient, Role, CreatorStatus, OrderStatus, ApplicationStatus } from "@prisma/client";
+import { PrismaClient, Role, CreatorStatus, OrderStatus, OrderKind, ApplicationStatus } from "@prisma/client";
 import { dicebearAvatar, generatedCreatorSeed, type CreatorSeed } from "./creator-fixtures";
 
 const prisma = new PrismaClient();
@@ -324,8 +324,11 @@ async function main() {
       deadline: "3 недели",
       initiator: "CLIENT",
       status: OrderStatus.PUBLISHED,
-      publishedAt: new Date()
-    }
+      publishedAt: new Date(),
+      // Вакансия — одна позиция, дублирует title (см. OrderKind в schema.prisma).
+      positions: { create: { title: "Айдентика для fashion-бренда" } }
+    },
+    include: { positions: true }
   });
 
   const order20 = await prisma.order.create({
@@ -340,25 +343,39 @@ async function main() {
       deadline: "Долгосрочно",
       initiator: "CREATOR",
       status: OrderStatus.PUBLISHED,
-      publishedAt: new Date()
-    }
+      publishedAt: new Date(),
+      positions: { create: { title: "Монтажер Reels на постоянный объем" } }
+    },
+    include: { positions: true }
   });
 
-  await prisma.order.createMany({
-    data: [
-      {
-        publicId: "ORD-018",
-        clientProfileId: client.clientProfile!.id,
-        title: "Креативная команда для спецпроекта",
-        category: "Креатив",
-        description: "Продюсер, арт-директор и motion-дизайнер.",
-        requirements: "Опыт комплексных digital-кампаний.",
-        budget: "от 450 тыс. ₽",
-        deadline: "6 недель",
-        initiator: "CLIENT",
-        status: OrderStatus.COMPLETED
+  // Демо-проект: несколько именованных позиций под одним постом (сборка
+  // команды) + открыт для волонтёрских откликов — см. Order.kind/
+  // acceptsVolunteers в schema.prisma.
+  const order18 = await prisma.order.create({
+    data: {
+      publicId: "ORD-018",
+      clientProfileId: client.clientProfile!.id,
+      title: "Креативная команда для спецпроекта",
+      category: "Креатив",
+      description: "Продюсер, арт-директор и motion-дизайнер.",
+      requirements: "Опыт комплексных digital-кампаний.",
+      budget: "от 450 тыс. ₽",
+      deadline: "6 недель",
+      initiator: "CLIENT",
+      status: OrderStatus.COMPLETED,
+      kind: OrderKind.PROJECT,
+      acceptsVolunteers: true,
+      positions: {
+        create: [
+          { title: "Продюсер" },
+          { title: "Арт-директор" },
+          { title: "Motion-дизайнер" },
+          { title: "Волонтёр", isVolunteer: true }
+        ]
       }
-    ]
+    },
+    include: { positions: true }
   });
 
   await prisma.invitation.create({
@@ -370,9 +387,12 @@ async function main() {
     }
   });
 
+  const order21PositionId = order21.positions[0].id;
+
   const application = await prisma.application.create({
     data: {
       orderId: order21.id,
+      positionId: order21PositionId,
       creatorProfileId: creators[0].creatorProfile!.id,
       status: ApplicationStatus.CHAT_OPEN,
       message: "Подходит мой опыт в fashion motion и запуске визуальных систем.",
@@ -385,6 +405,7 @@ async function main() {
   await prisma.application.createMany({
     data: creators.slice(1, 6).map((creator, index) => ({
       orderId: order21.id,
+      positionId: order21PositionId,
       creatorProfileId: creator.creatorProfile!.id,
       status: index < 2 ? ApplicationStatus.VIEWED : ApplicationStatus.SENT,
       message: "Готов(а) обсудить задачу и показать релевантные кейсы.",
@@ -392,6 +413,47 @@ async function main() {
       priceCents: (160000 + index * 20000) * 100,
       duration: index % 2 === 0 ? "3 недели" : "4 недели"
     }))
+  });
+
+  // Демо-отклики на проект ORD-018: разные креаторы откликаются на разные
+  // позиции (включая волонтёрскую) — показывает независимость кнопок
+  // отклика внутри одного проекта.
+  const [producerPosition, artDirectorPosition, motionPosition, volunteerPosition] = order18.positions;
+  await prisma.application.createMany({
+    data: [
+      {
+        orderId: order18.id,
+        positionId: producerPosition.id,
+        creatorProfileId: creators[6].creatorProfile!.id,
+        status: ApplicationStatus.ACCEPTED,
+        message: "Продюсировал похожие спецпроекты, готов обсудить план.",
+        relevantCase: "https://portfolio.example/producer",
+        clientRecommended: true
+      },
+      {
+        orderId: order18.id,
+        positionId: artDirectorPosition.id,
+        creatorProfileId: creators[2].creatorProfile!.id,
+        status: ApplicationStatus.ACCEPTED,
+        message: "Есть опыт арт-дирекшна digital-кампаний такого масштаба.",
+        relevantCase: "https://portfolio.example/artdirection",
+        clientRecommended: true
+      },
+      {
+        orderId: order18.id,
+        positionId: motionPosition.id,
+        creatorProfileId: creators[0].creatorProfile!.id,
+        status: ApplicationStatus.SENT,
+        message: "Могу собрать motion-часть, есть свежие кейсы."
+      },
+      {
+        orderId: order18.id,
+        positionId: volunteerPosition.id,
+        creatorProfileId: creators[7].creatorProfile!.id,
+        status: ApplicationStatus.SENT,
+        message: "Хочу поучаствовать волонтёром ради портфолио и опыта в команде."
+      }
+    ]
   });
 
   const chat = await prisma.chat.create({

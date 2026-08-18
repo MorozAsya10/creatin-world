@@ -48,6 +48,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
                 description: true
               }
             },
+        positions: { orderBy: { createdAt: "asc" } },
         applications: {
           where: canManage
             ? {}
@@ -61,6 +62,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
                 files: true
               }
             },
+            position: true,
             chat: true
           },
           orderBy: { createdAt: "desc" }
@@ -82,18 +84,29 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   }
 }
 
+// Модерационные переходы (PUBLISHED/REJECTED/ARCHIVED) — только админ.
+// COMPLETED — единственный статус, который вправе выставить сам заказчик,
+// владелец заказа (без модерации): это его сигнал "работа сделана", и именно
+// он открывает возможность оценить исполнителей (см.
+// POST /api/applications/[id]/recommend).
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const admin = await requireUser([Role.ADMIN]);
+    const user = await requireUser([Role.ADMIN, Role.CLIENT]);
     const { id } = await params;
     const { status } = updateSchema.parse(await request.json());
     const existing = await prisma.order.findFirst({
       where: { OR: [{ id }, { publicId: id }] }
     });
     if (!existing) throw new ApiError(404, "Заказ не найден");
+
+    const isOwner = user.role === Role.CLIENT && user.clientProfile?.id === existing.clientProfileId;
+    if (user.role === Role.CLIENT) {
+      if (!isOwner) throw new ApiError(403, "Это не ваш заказ");
+      if (status !== "COMPLETED") throw new ApiError(403, "Заказчик может только отметить заказ выполненным");
+    }
 
     const order = await prisma.order.update({
       where: { id: existing.id },
@@ -105,7 +118,7 @@ export async function PATCH(
 
     await prisma.auditLog.create({
       data: {
-        actorId: admin.id,
+        actorId: user.id,
         action: `order.${status.toLowerCase()}`,
         entity: "Order",
         entityId: order.id
