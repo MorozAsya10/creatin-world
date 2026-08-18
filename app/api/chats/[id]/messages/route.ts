@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ok, fail, ApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
-import { notifyUser } from "@/lib/telegram-bot";
+import { notifyChatMessage } from "@/lib/telegram-bot";
 
 const messageSchema = z.object({
   body: z.string().trim().min(1).max(4000)
@@ -16,8 +16,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const chat = await prisma.chat.findUnique({
       where: { id },
       include: {
-        creatorProfile: { select: { userId: true } },
-        clientProfile: { select: { userId: true } }
+        order: { select: { title: true } },
+        creatorProfile: { select: { userId: true, firstName: true, lastName: true } },
+        clientProfile: { select: { userId: true, companyName: true } }
       }
     });
     if (!chat) throw new ApiError(404, "Chat not found");
@@ -51,11 +52,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // связи chat.creatorProfile/clientProfile, а не по user.role (см.
     // dual-role в lib/session.ts: сам отправитель может быть и креатором, и
     // заказчиком одновременно, поэтому сверяемся с id профиля, а не с ролью).
-    const recipientUserId =
-      user.creatorProfile?.id === chat.creatorProfileId
-        ? chat.clientProfile.userId
-        : chat.creatorProfile.userId;
-    await notifyUser(recipientUserId, `Новое сообщение в чате: ${body.body.slice(0, 200)}`);
+    const senderIsCreator = user.creatorProfile?.id === chat.creatorProfileId;
+    const recipientUserId = senderIsCreator ? chat.clientProfile.userId : chat.creatorProfile.userId;
+    // В тексте пуша — собеседник и заказ, чтобы даже "схлопнутое" уведомление
+    // (см. notifyChatMessage) было понятно без открытия сайта.
+    const counterpart = senderIsCreator
+      ? chat.clientProfile.companyName
+      : `${chat.creatorProfile.firstName} ${chat.creatorProfile.lastName}`;
+    await notifyChatMessage(recipientUserId, chat.id, `${counterpart} · «${chat.order.title}»`, body.body.slice(0, 200));
 
     return ok({ message }, { status: 201 });
   } catch (error) {

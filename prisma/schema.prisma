@@ -343,6 +343,7 @@ model Chat {
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   messages         Message[]
+  telegramPushes   TelegramChatPush[]
 }
 
 model Message {
@@ -466,6 +467,25 @@ model TelegramSupportThread {
   createdAt      DateTime @default(now())
 
   @@unique([adminChatId, adminMessageId])
+}
+
+// Схлопывает частые пуши о новых сообщениях чата в одно обновляемое
+// сообщение в Telegram вместо потока отдельных ("не хочется, чтобы всё
+// валилось в кучу" — тот же запрос, что и для очереди модерации, только для
+// обычных пользователей). Пока последний пуш по (chatId, recipientUserId)
+// свежее окна в notifyChatMessage (lib/telegram-bot.ts) — редактируем именно
+// его (bump unreadCount), а не шлём новое сообщение; после паузы в
+// переписке следующее сообщение снова стартует свежий пуш.
+model TelegramChatPush {
+  id                String   @id @default(cuid())
+  chatId            String
+  chat              Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  recipientUserId   String
+  telegramMessageId Int
+  unreadCount       Int      @default(1)
+  updatedAt         DateTime @updatedAt
+
+  @@unique([chatId, recipientUserId])
 }
 
 // Журнал действий админа (одобрение/отклонение анкет и заказов, публикация

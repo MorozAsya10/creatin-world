@@ -6,6 +6,7 @@ import {
   answerCallbackQuery,
   answerPreCheckoutQuery,
   broadcastToAudience,
+  copyMessage,
   editMessageReplyMarkup,
   editMessageText,
   forwardMessage,
@@ -113,7 +114,16 @@ async function handleSupportIncoming(telegramId: string, chatId: string, message
 
 // Ответ админа на пересланное сообщение — ищем, кому он адресован, по
 // (adminChatId, adminMessageId пересланного сообщения, на которое он Reply'ит).
-async function handleSupportReply(adminChatId: string, replyToMessageId: number, text: string) {
+// Ответ может быть текстом ИЛИ медиа (фото/файл/голосовое) — для медиа
+// используем copyMessage (см. lib/telegram-bot.ts), чтобы у пользователя
+// сообщение выглядело как обычное, а не "Forwarded from <личный аккаунт
+// админа>". Раньше тут проверялся только text, из-за чего ответ фото/файлом
+// молча пропадал.
+async function handleSupportReply(
+  adminChatId: string,
+  replyToMessageId: number,
+  reply: { message_id: number; text?: string }
+) {
   const thread = await prisma.telegramSupportThread.findUnique({
     where: { adminChatId_adminMessageId: { adminChatId, adminMessageId: replyToMessageId } },
     include: { user: true }
@@ -122,8 +132,41 @@ async function handleSupportReply(adminChatId: string, replyToMessageId: number,
 
   // Прямой ответ на вопрос пользователя — доставляем всегда, независимо от
   // notificationPreference (это не рассылка, а ответ на его же обращение).
-  await sendTelegramMessage(thread.user.telegramId, `Ответ поддержки:\n${text}`);
+  if (reply.text) {
+    await sendTelegramMessage(thread.user.telegramId, `Ответ поддержки:\n${reply.text}`);
+  } else {
+    await sendTelegramMessage(thread.user.telegramId, "Ответ поддержки:");
+    await copyMessage(thread.user.telegramId, adminChatId, reply.message_id);
+  }
   return true;
+}
+
+type IncomingMessage = {
+  text?: string;
+  photo?: unknown;
+  document?: unknown;
+  voice?: unknown;
+  video?: unknown;
+  video_note?: unknown;
+  sticker?: unknown;
+  audio?: unknown;
+};
+
+// Общая проверка "есть что переслать в поддержку" — текст (не команда) или
+// любое медиа. Используется и для входящих сообщений пользователя, и для
+// ответов админа (Reply), чтобы фото/файлы обрабатывались одинаково в обе
+// стороны.
+function hasSupportableContent(message: IncomingMessage) {
+  return Boolean(
+    (message.text && !message.text.startsWith("/")) ||
+      message.photo ||
+      message.document ||
+      message.voice ||
+      message.video ||
+      message.video_note ||
+      message.sticker ||
+      message.audio
+  );
 }
 
 async function handleNotifyToggle(telegramId: string, chatId: string, callbackQueryId: string) {
@@ -321,21 +364,13 @@ export async function POST(request: NextRequest) {
     }
 
     const message = update.message as
-      | {
+      | (IncomingMessage & {
           message_id: number;
           chat: { id: number };
           from?: { id: number };
-          text?: string;
-          photo?: unknown;
-          document?: unknown;
-          voice?: unknown;
-          video?: unknown;
-          video_note?: unknown;
-          sticker?: unknown;
-          audio?: unknown;
           reply_to_message?: { message_id: number; text?: string };
           successful_payment?: { invoice_payload: string; telegram_payment_charge_id: string };
-        }
+        })
       | undefined;
 
     if (message) {
@@ -386,9 +421,14 @@ export async function POST(request: NextRequest) {
       }
 
       // Ответ админа на пересланный вопрос поддержки: чат — админский,
-      // сообщение — Reply на пересланное сообщение пользователя.
-      if (isAdminChat && message.reply_to_message && message.text) {
-        const handled = await handleSupportReply(chatId, message.reply_to_message.message_id, message.text);
+      // сообщение — Reply на пересланное сообщение пользователя. Реагируем и
+      // на текст, и на медиа (фото/файл/голосовое) — раньше отвечало только
+      // текстом, и ответ фото/файлом молча пропадал.
+      if (isAdminChat && message.reply_to_message && hasSupportableContent(message)) {
+        const handled = await handleSupportReply(chatId, message.reply_to_message.message_id, {
+          message_id: message.message_id,
+          text: message.text
+        });
         if (handled) return ok({ ok: true });
       }
 
@@ -396,17 +436,7 @@ export async function POST(request: NextRequest) {
       // любое служебное сообщение админа улетало бы самому себе).
       if (isAdminChat) return ok({ ok: true });
 
-      const hasSupportableContent =
-        (message.text && !message.text.startsWith("/")) ||
-        message.photo ||
-        message.document ||
-        message.voice ||
-        message.video ||
-        message.video_note ||
-        message.sticker ||
-        message.audio;
-
-      if (hasSupportableContent) {
+      if (hasSupportableContent(message)) {
         await handleSupportIncoming(telegramId, chatId, message.message_id);
         return ok({ ok: true });
       }

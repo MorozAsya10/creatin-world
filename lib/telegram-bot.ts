@@ -51,8 +51,8 @@ export async function sendTelegramMessage(
   chatId: string | number,
   text: string,
   options?: { replyMarkup?: ReturnType<typeof inlineKeyboard>; replyToMessageId?: number }
-) {
-  return callTelegramApi("sendMessage", {
+): Promise<{ message_id: number }> {
+  return callTelegramApi<{ message_id: number }>("sendMessage", {
     chat_id: chatId,
     text,
     parse_mode: "HTML",
@@ -73,6 +73,22 @@ export async function forwardMessage(
   messageId: number
 ): Promise<{ message_id: number }> {
   return callTelegramApi<{ message_id: number }>("forwardMessage", {
+    chat_id: toChatId,
+    from_chat_id: fromChatId,
+    message_id: messageId
+  });
+}
+
+// Как forwardMessage, но без пометки "Forwarded from" — этим и отличается
+// copyMessage в Bot API. Используем для ответа админа обратно пользователю
+// (см. handleSupportReply в app/api/telegram/webhook/route.ts): пользователь
+// не должен видеть личный Telegram-аккаунт админа, только "Ответ поддержки".
+export async function copyMessage(
+  toChatId: string | number,
+  fromChatId: string | number,
+  messageId: number
+): Promise<{ message_id: number }> {
+  return callTelegramApi<{ message_id: number }>("copyMessage", {
     chat_id: toChatId,
     from_chat_id: fromChatId,
     message_id: messageId
@@ -190,6 +206,59 @@ export async function notifyUser(
     // Пуш — best-effort: не должен ронять основной запрос (создание отклика,
     // отправку сообщения и т.д.), если у Telegram временные проблемы.
     console.error("notifyUser failed", error);
+  }
+}
+
+// Окно, в течение которого несколько сообщений подряд в одном чате
+// схлопываются в один редактируемый пуш вместо потока отдельных сообщений
+// (см. TelegramChatPush в schema.prisma). После паузы длиннее окна следующее
+// сообщение снова начинает свежий пуш со счётчиком 1.
+const CHAT_PUSH_COLLAPSE_WINDOW_MS = 10 * 60 * 1000;
+
+// Пуш о новом сообщении в чате — в отличие от notifyUser, при частой
+// переписке не шлёт сообщение на каждую реплику, а обновляет одно и то же
+// (bump счётчика), пока собеседники не сделают паузу дольше
+// CHAT_PUSH_COLLAPSE_WINDOW_MS. contextLabel — короткое описание чата
+// (например, заказ и вторая сторона) для текста пуша.
+export async function notifyChatMessage(recipientUserId: string, chatId: string, contextLabel: string, preview: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: recipientUserId },
+    select: { telegramId: true, notificationPreference: true }
+  });
+  if (!user?.telegramId) return;
+  if (user.notificationPreference === "platform") return;
+
+  const text = (count: number) =>
+    count > 1
+      ? `Новые сообщения (${count}) в чате: ${contextLabel}\nПоследнее: ${preview}`
+      : `Новое сообщение в чате: ${contextLabel}\n${preview}`;
+
+  try {
+    const existing = await prisma.telegramChatPush.findUnique({
+      where: { chatId_recipientUserId: { chatId, recipientUserId } }
+    });
+
+    const isFresh = existing && Date.now() - existing.updatedAt.getTime() < CHAT_PUSH_COLLAPSE_WINDOW_MS;
+
+    if (existing && isFresh) {
+      const nextCount = existing.unreadCount + 1;
+      await editMessageText(user.telegramId, existing.telegramMessageId, text(nextCount));
+      await prisma.telegramChatPush.update({
+        where: { id: existing.id },
+        data: { unreadCount: nextCount }
+      });
+      return;
+    }
+
+    const sent = await sendTelegramMessage(user.telegramId, text(1));
+
+    await prisma.telegramChatPush.upsert({
+      where: { chatId_recipientUserId: { chatId, recipientUserId } },
+      update: { telegramMessageId: sent.message_id, unreadCount: 1 },
+      create: { chatId, recipientUserId, telegramMessageId: sent.message_id, unreadCount: 1 }
+    });
+  } catch (error) {
+    console.error("notifyChatMessage failed", error);
   }
 }
 
