@@ -5,6 +5,7 @@ import { ok, fail, ApiError } from "@/lib/api";
 import { getFeatureFlags } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, requireUser } from "@/lib/session";
+import { notifyModerationItem } from "@/lib/telegram-bot";
 
 // Верхние границы — по мотивам обсуждения на планировании (ориентир —
 // "средняя температура по больнице" у HeadHunter и подобных): описание не
@@ -168,6 +169,10 @@ export async function POST(request: NextRequest) {
         ]
       }
     });
+
+    if (order.status === "MODERATION") {
+      await notifyModerationItem("order", order.id, `«${order.title}» — заказ на модерации`);
+    }
 
     return ok({ order }, { status: 201 });
   } catch (error) {

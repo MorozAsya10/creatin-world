@@ -87,6 +87,36 @@ export async function answerCallbackQuery(callbackQueryId: string, text?: string
   });
 }
 
+// Правим уже отправленное сообщение вместо того, чтобы слать новое — нужно,
+// чтобы после нажатия "Одобрить/Отклонить" кнопки исчезали, а не копились в
+// чате (см. запрос "не хочется, чтобы всё валилось в кучу").
+export async function editMessageText(
+  chatId: string | number,
+  messageId: number,
+  text: string,
+  options?: { replyMarkup?: ReturnType<typeof inlineKeyboard> }
+) {
+  return callTelegramApi("editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    parse_mode: "HTML",
+    reply_markup: options?.replyMarkup
+  });
+}
+
+export async function editMessageReplyMarkup(
+  chatId: string | number,
+  messageId: number,
+  replyMarkup?: ReturnType<typeof inlineKeyboard>
+) {
+  return callTelegramApi("editMessageReplyMarkup", {
+    chat_id: chatId,
+    message_id: messageId,
+    reply_markup: replyMarkup
+  });
+}
+
 export async function setWebhook(url: string, secretToken?: string) {
   return callTelegramApi("setWebhook", {
     url,
@@ -163,6 +193,29 @@ export async function notifyUser(
   }
 }
 
+// Пуш о новой анкете/заказе в очереди модерации — с кнопками "Одобрить" и
+// "Отклонить" прямо под сообщением, чтобы решение принималось не открывая
+// сайт (см. обработку callback_data вида mod:<kind>:<id>:<decision> в
+// app/api/telegram/webhook/route.ts). kind однозначно определяет, какую
+// модель обновлять при нажатии.
+export async function notifyModerationItem(kind: "creator" | "client" | "order", id: string, label: string) {
+  const adminChatId = getSupportAdminChatId();
+  if (!adminChatId) return;
+
+  try {
+    await sendTelegramMessage(adminChatId, `На модерации: ${label}`, {
+      replyMarkup: inlineKeyboard([
+        [
+          { text: "✅ Одобрить", callback_data: `mod:${kind}:${id}:approve` },
+          { text: "❌ Отклонить", callback_data: `mod:${kind}:${id}:reject` }
+        ]
+      ])
+    });
+  } catch (error) {
+    console.error("notifyModerationItem failed", error);
+  }
+}
+
 // Рассылка новостей — используется админ-роутом. Возвращает количество
 // успешных и неуспешных доставок, чтобы админ видел реальный охват.
 export async function broadcastTelegram(
@@ -188,4 +241,34 @@ export async function broadcastTelegram(
   }
 
   return { sent, failed };
+}
+
+export type BroadcastAudience = "all" | "creators" | "clients";
+
+// Общий выбор получателей по аудитории — используется и
+// POST /api/admin/telegram/broadcast (форма в веб-админке), и
+// /broadcast прямо в боте (см. app/api/telegram/webhook/route.ts), чтобы
+// оба канала рассылали одинаковому кругу людей одной и той же логикой.
+export async function broadcastToAudience(audience: BroadcastAudience, text: string) {
+  const users = await prisma.user.findMany({
+    where:
+      audience === "creators"
+        ? { creatorProfile: { isNot: null } }
+        : audience === "clients"
+          ? { clientProfile: { isNot: null } }
+          : {},
+    select: { id: true }
+  });
+
+  return broadcastTelegram(
+    users.map((item) => item.id),
+    text
+  );
+}
+
+// Только сообщения от этого чата (первый id из TELEGRAM_ADMIN_IDS) считаются
+// админскими командами (/menu, /broadcast, нажатия на кнопки модерации) —
+// иначе любой пользователь смог бы, зная синтаксис, дёргать эти команды.
+export function isSupportAdminChat(chatId: string | number) {
+  return getSupportAdminChatId() === String(chatId);
 }

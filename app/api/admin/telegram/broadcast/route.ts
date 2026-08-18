@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ok, fail } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
-import { broadcastTelegram } from "@/lib/telegram-bot";
+import { broadcastToAudience } from "@/lib/telegram-bot";
 
 // Рассылка новостей всем пользователям в Telegram — только админ. audience
 // сужает получателей до тех, у кого есть соответствующий профиль; сам факт
@@ -19,20 +19,7 @@ export async function POST(request: Request) {
     const admin = await requireUser([Role.ADMIN]);
     const body = broadcastSchema.parse(await request.json());
 
-    const users = await prisma.user.findMany({
-      where:
-        body.audience === "creators"
-          ? { creatorProfile: { isNot: null } }
-          : body.audience === "clients"
-            ? { clientProfile: { isNot: null } }
-            : {},
-      select: { id: true }
-    });
-
-    const result = await broadcastTelegram(
-      users.map((item) => item.id),
-      body.text
-    );
+    const result = await broadcastToAudience(body.audience, body.text);
 
     await prisma.auditLog.create({
       data: {

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ok, fail, ApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
+import { notifyUser } from "@/lib/telegram-bot";
 
 // Ручное решение админа по анкете заказчика, стоящей в очереди модерации
 // (см. GET /api/admin/overview -> pendingClients). Пишет AuditLog для истории.
@@ -18,7 +19,7 @@ export async function PATCH(
     const admin = await requireUser([Role.ADMIN]);
     const { id } = await params;
     const { status } = schema.parse(await request.json());
-    const existing = await prisma.clientProfile.findUnique({ where: { id } });
+    const existing = await prisma.clientProfile.findUnique({ where: { id }, select: { userId: true } });
     if (!existing) throw new ApiError(404, "Анкета не найдена");
 
     const profile = await prisma.clientProfile.update({
@@ -37,6 +38,11 @@ export async function PATCH(
         entityId: profile.id
       }
     });
+
+    await notifyUser(
+      existing.userId,
+      status === "APPROVED" ? "Ваша анкета заказчика одобрена!" : "Ваша анкета заказчика отклонена модерацией."
+    );
 
     return ok({ profile });
   } catch (error) {

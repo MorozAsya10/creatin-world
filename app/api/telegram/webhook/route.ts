@@ -1,13 +1,20 @@
 import { NextRequest } from "next/server";
+import { Role } from "@prisma/client";
 import { ok } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import {
   answerCallbackQuery,
   answerPreCheckoutQuery,
+  broadcastToAudience,
+  editMessageReplyMarkup,
+  editMessageText,
   forwardMessage,
   getSupportAdminChatId,
   inlineKeyboard,
-  sendTelegramMessage
+  isSupportAdminChat,
+  notifyUser,
+  sendTelegramMessage,
+  type BroadcastAudience
 } from "@/lib/telegram-bot";
 import { finalizeTelegramPayment } from "@/lib/payments";
 
@@ -33,15 +40,44 @@ const menuKeyboard = inlineKeyboard([
   [{ text: "Уведомления вкл/выкл", callback_data: "notify:toggle" }]
 ]);
 
+// Отдельное меню для админского чата (см. isSupportAdminChat) — по кнопке, а
+// не автоматическими пушами, чтобы не заваливать чат сообщениями (см. запрос
+// "не хочется, чтобы всё валилось в кучу"): очередь модерации подтягивается
+// по требованию, а не только когда появляется новый элемент.
+const adminMenuKeyboard = inlineKeyboard([
+  [{ text: "🗂 Очередь модерации", callback_data: "admin:moderation" }],
+  [{ text: "📨 Рассылка", callback_data: "admin:broadcast" }]
+]);
+
+const audienceKeyboard = inlineKeyboard([
+  [
+    { text: "Все", callback_data: "broadcast:all" },
+    { text: "Креаторы", callback_data: "broadcast:creators" },
+    { text: "Заказчики", callback_data: "broadcast:clients" }
+  ]
+]);
+
+const audienceLabels: Record<BroadcastAudience, string> = {
+  all: "Все",
+  creators: "Креаторы",
+  clients: "Заказчики"
+};
+
 async function handleStart(chatId: string) {
+  const isAdmin = isSupportAdminChat(chatId);
   await sendTelegramMessage(
     chatId,
-    "Привет! Это бот CREATIN.WORLD.\n\n— «Открыть кабинет» — перейти на сайт.\n— «Поддержка» — написать нам, ответим прямо здесь.\n— «Уведомления вкл/выкл» — получать ли пуши о заказах и откликах в этот чат.",
+    "Привет! Это бот CREATIN.WORLD.\n\n— «Открыть кабинет» — перейти на сайт.\n— «Поддержка» — написать нам, ответим прямо здесь.\n— «Уведомления вкл/выкл» — получать ли пуши о заказах и откликах в этот чат." +
+      (isAdmin ? "\n\nВы админ-чат: команда /menu откроет админ-меню." : ""),
     { replyMarkup: menuKeyboard }
   );
 }
 
-async function handleSupportIncoming(telegramId: string, chatId: string, messageId: number, text: string) {
+// Пересылаем в поддержку ЛЮБОЕ сообщение пользователя — не только текст.
+// Раньше проверялось только message.text, из-за чего фото/файлы/голосовые
+// молча пропадали (forwardMessage их пересылает штатно, проблема была
+// только в условии, которое решало, вызывать ли его вообще).
+async function handleSupportIncoming(telegramId: string, chatId: string, messageId: number) {
   const user = await prisma.user.findUnique({ where: { telegramId } });
 
   if (!user) {
@@ -112,6 +148,110 @@ async function handleNotifyToggle(telegramId: string, chatId: string, callbackQu
   );
 }
 
+// Текущая очередь модерации по требованию (команда/кнопка), а не только
+// пушами по факту появления — так админ сама решает, когда разбирать пачку,
+// вместо того чтобы это само сыпалось в чат.
+async function sendModerationQueue(chatId: string) {
+  const [creators, clients, orders] = await Promise.all([
+    prisma.creatorProfile.findMany({ where: { status: "MODERATION" }, select: { id: true, firstName: true, lastName: true } }),
+    prisma.clientProfile.findMany({ where: { status: "MODERATION" }, select: { id: true, companyName: true } }),
+    prisma.order.findMany({ where: { status: "MODERATION" }, select: { id: true, title: true } })
+  ]);
+
+  const total = creators.length + clients.length + orders.length;
+  if (!total) {
+    await sendTelegramMessage(chatId, "Очередь модерации пуста 🎉");
+    return;
+  }
+
+  await sendTelegramMessage(chatId, `В очереди: ${total}. Разбираем по одному:`);
+
+  for (const creator of creators) {
+    await sendTelegramMessage(chatId, `Креатор: ${creator.firstName} ${creator.lastName}`, {
+      replyMarkup: inlineKeyboard([
+        [
+          { text: "✅ Одобрить", callback_data: `mod:creator:${creator.id}:approve` },
+          { text: "❌ Отклонить", callback_data: `mod:creator:${creator.id}:reject` }
+        ]
+      ])
+    });
+  }
+  for (const client of clients) {
+    await sendTelegramMessage(chatId, `Заказчик: ${client.companyName}`, {
+      replyMarkup: inlineKeyboard([
+        [
+          { text: "✅ Одобрить", callback_data: `mod:client:${client.id}:approve` },
+          { text: "❌ Отклонить", callback_data: `mod:client:${client.id}:reject` }
+        ]
+      ])
+    });
+  }
+  for (const order of orders) {
+    await sendTelegramMessage(chatId, `Заказ: «${order.title}»`, {
+      replyMarkup: inlineKeyboard([
+        [
+          { text: "✅ Опубликовать", callback_data: `mod:order:${order.id}:approve` },
+          { text: "❌ Отклонить", callback_data: `mod:order:${order.id}:reject` }
+        ]
+      ])
+    });
+  }
+}
+
+// Само решение по кнопке "Одобрить/Отклонить" — та же логика, что и в
+// app/api/admin/creators/[id], admin/clients/[id], orders/[id] (PATCH), но
+// вызванная прямо из вебхука, без похода через HTTP на собственный же API.
+async function applyModerationDecision(
+  kind: "creator" | "client" | "order",
+  id: string,
+  decision: "approve" | "reject",
+  adminTelegramId: string
+) {
+  const admin = await prisma.user.findFirst({ where: { telegramId: adminTelegramId, role: Role.ADMIN } });
+
+  if (kind === "creator") {
+    const status = decision === "approve" ? "APPROVED" : "REJECTED";
+    const profile = await prisma.creatorProfile.update({
+      where: { id },
+      data: { status, isApproved: decision === "approve" }
+    });
+    await prisma.auditLog.create({
+      data: { actorId: admin?.id, action: `creator.${status.toLowerCase()}`, entity: "CreatorProfile", entityId: id }
+    });
+    await notifyUser(profile.userId, decision === "approve" ? "Ваша анкета креатора одобрена!" : "Ваша анкета креатора отклонена модерацией.");
+    return `${profile.firstName} ${profile.lastName}`;
+  }
+
+  if (kind === "client") {
+    const status = decision === "approve" ? "APPROVED" : "REJECTED";
+    const profile = await prisma.clientProfile.update({
+      where: { id },
+      data: { status, isApproved: decision === "approve" }
+    });
+    await prisma.auditLog.create({
+      data: { actorId: admin?.id, action: `client.${status.toLowerCase()}`, entity: "ClientProfile", entityId: id }
+    });
+    await notifyUser(profile.userId, decision === "approve" ? "Ваша анкета заказчика одобрена!" : "Ваша анкета заказчика отклонена модерацией.");
+    return profile.companyName;
+  }
+
+  const existing = await prisma.order.findUnique({ where: { id }, include: { clientProfile: { select: { userId: true } } } });
+  if (!existing) return null;
+  const status = decision === "approve" ? "PUBLISHED" : "REJECTED";
+  const order = await prisma.order.update({
+    where: { id },
+    data: { status, publishedAt: decision === "approve" ? new Date() : existing.publishedAt }
+  });
+  await prisma.auditLog.create({
+    data: { actorId: admin?.id, action: `order.${status.toLowerCase()}`, entity: "Order", entityId: id }
+  });
+  await notifyUser(
+    existing.clientProfile.userId,
+    decision === "approve" ? `Заказ «${order.title}» опубликован и виден исполнителям.` : `Заказ «${order.title}» отклонён модерацией.`
+  );
+  return order.title;
+}
+
 export async function POST(request: NextRequest) {
   if (!verifySecret(request)) {
     return ok({ ok: true }, { status: 401 });
@@ -121,16 +261,48 @@ export async function POST(request: NextRequest) {
     const update = (await request.json()) as Record<string, unknown>;
 
     const callbackQuery = update.callback_query as
-      | { id: string; data?: string; from?: { id: number }; message?: { chat: { id: number }; message_id: number } }
+      | { id: string; data?: string; from?: { id: number }; message?: { chat: { id: number }; message_id: number; text?: string } }
       | undefined;
     if (callbackQuery?.data && callbackQuery.message) {
       const chatId = String(callbackQuery.message.chat.id);
       const telegramId = String(callbackQuery.from?.id ?? callbackQuery.message.chat.id);
-      if (callbackQuery.data === "support:start") {
+      const messageId = callbackQuery.message.message_id;
+      const data = callbackQuery.data;
+
+      if (data === "support:start") {
         await answerCallbackQuery(callbackQuery.id);
         await sendTelegramMessage(chatId, "Напишите ваш вопрос одним сообщением — мы ответим прямо здесь.");
-      } else if (callbackQuery.data === "notify:toggle") {
+      } else if (data === "notify:toggle") {
         await handleNotifyToggle(telegramId, chatId, callbackQuery.id);
+      } else if (data === "admin:moderation" && isSupportAdminChat(chatId)) {
+        await answerCallbackQuery(callbackQuery.id);
+        await sendModerationQueue(chatId);
+      } else if (data === "admin:broadcast" && isSupportAdminChat(chatId)) {
+        await answerCallbackQuery(callbackQuery.id);
+        await sendTelegramMessage(chatId, "Кому отправить?", { replyMarkup: audienceKeyboard });
+      } else if (data.startsWith("broadcast:") && isSupportAdminChat(chatId)) {
+        const audience = data.slice("broadcast:".length) as BroadcastAudience;
+        await answerCallbackQuery(callbackQuery.id);
+        // Убираем кнопки у сообщения-запроса аудитории и просим ответить
+        // (Reply) текстом рассылки на НОВОЕ сообщение — его текст содержит
+        // распознаваемый маркер "Аудитория: ...", по которому при получении
+        // ответа (см. ниже, reply_to_message) понимаем, кому слать.
+        await editMessageReplyMarkup(chatId, messageId);
+        await sendTelegramMessage(
+          chatId,
+          `📨 Аудитория: ${audienceLabels[audience]}\nОтветьте (Reply) на это сообщение текстом рассылки.`
+        );
+      } else if (data.startsWith("mod:") && isSupportAdminChat(chatId)) {
+        const parts = data.split(":");
+        const kind = parts[1] as "creator" | "client" | "order";
+        const id = parts[2];
+        const decision = parts[3] as "approve" | "reject";
+        await answerCallbackQuery(callbackQuery.id, decision === "approve" ? "Одобрено" : "Отклонено");
+        const label = await applyModerationDecision(kind, id, decision, telegramId);
+        const resultText = label
+          ? `${callbackQuery.message.text || ""}\n\n${decision === "approve" ? "✅ Одобрено" : "❌ Отклонено"}`
+          : "Не найдено (возможно, уже обработано).";
+        await editMessageText(chatId, messageId, resultText);
       } else {
         await answerCallbackQuery(callbackQuery.id);
       }
@@ -154,7 +326,14 @@ export async function POST(request: NextRequest) {
           chat: { id: number };
           from?: { id: number };
           text?: string;
-          reply_to_message?: { message_id: number };
+          photo?: unknown;
+          document?: unknown;
+          voice?: unknown;
+          video?: unknown;
+          video_note?: unknown;
+          sticker?: unknown;
+          audio?: unknown;
+          reply_to_message?: { message_id: number; text?: string };
           successful_payment?: { invoice_payload: string; telegram_payment_charge_id: string };
         }
       | undefined;
@@ -162,6 +341,7 @@ export async function POST(request: NextRequest) {
     if (message) {
       const chatId = String(message.chat.id);
       const telegramId = message.from ? String(message.from.id) : chatId;
+      const isAdminChat = isSupportAdminChat(chatId);
 
       if (message.successful_payment) {
         await finalizeTelegramPayment({
@@ -178,15 +358,56 @@ export async function POST(request: NextRequest) {
         return ok({ ok: true });
       }
 
-      // Ответ админа на пересланный вопрос: чат — один из TELEGRAM_ADMIN_IDS,
-      // сообщение — Reply на что-то (пересланное сообщение пользователя).
-      if (message.reply_to_message && message.text) {
+      if (message.text === "/menu" && isAdminChat) {
+        await sendTelegramMessage(chatId, "Админ-меню:", { replyMarkup: adminMenuKeyboard });
+        return ok({ ok: true });
+      }
+
+      if (message.text === "/broadcast" && isAdminChat) {
+        await sendTelegramMessage(chatId, "Кому отправить?", { replyMarkup: audienceKeyboard });
+        return ok({ ok: true });
+      }
+
+      // Reply на наше собственное сообщение-запрос аудитории ("📨 Аудитория:
+      // ..."): парсим аудиторию из текста ТОГО сообщения (а не храним
+      // отдельное состояние в БД) и сразу рассылаем.
+      if (isAdminChat && message.reply_to_message?.text && message.text) {
+        const match = message.reply_to_message.text.match(/^📨 Аудитория: (Все|Креаторы|Заказчики)/);
+        if (match) {
+          const audience = (Object.entries(audienceLabels).find(([, label]) => label === match[1])?.[0] ||
+            "all") as BroadcastAudience;
+          const result = await broadcastToAudience(audience, message.text);
+          await sendTelegramMessage(
+            chatId,
+            `Отправлено: ${result.sent}${result.failed ? `, не доставлено: ${result.failed}` : ""}.`
+          );
+          return ok({ ok: true });
+        }
+      }
+
+      // Ответ админа на пересланный вопрос поддержки: чат — админский,
+      // сообщение — Reply на пересланное сообщение пользователя.
+      if (isAdminChat && message.reply_to_message && message.text) {
         const handled = await handleSupportReply(chatId, message.reply_to_message.message_id, message.text);
         if (handled) return ok({ ok: true });
       }
 
-      if (message.text && !message.text.startsWith("/")) {
-        await handleSupportIncoming(telegramId, chatId, message.message_id, message.text);
+      // Админский чат сам ничего не создаёт как "вопрос в поддержку" (иначе
+      // любое служебное сообщение админа улетало бы самому себе).
+      if (isAdminChat) return ok({ ok: true });
+
+      const hasSupportableContent =
+        (message.text && !message.text.startsWith("/")) ||
+        message.photo ||
+        message.document ||
+        message.voice ||
+        message.video ||
+        message.video_note ||
+        message.sticker ||
+        message.audio;
+
+      if (hasSupportableContent) {
+        await handleSupportIncoming(telegramId, chatId, message.message_id);
         return ok({ ok: true });
       }
     }

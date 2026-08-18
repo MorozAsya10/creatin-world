@@ -4,6 +4,7 @@ import { ok, fail, ApiError } from "@/lib/api";
 import { getFeatureFlags } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
+import { notifyModerationItem } from "@/lib/telegram-bot";
 
 const schema = z.object({
   companyName: z.string().min(2),
@@ -49,6 +50,10 @@ export async function POST(request: Request) {
       }
     });
 
+    if (status === "MODERATION") {
+      await notifyModerationItem("client", profile.id, `${profile.companyName} (активация роли)`);
+    }
+
     return ok({ profile }, { status: 201 });
   } catch (error) {
     return fail(error);
@@ -83,6 +88,10 @@ export async function PUT(request: Request) {
         }
       });
     });
+
+    if (profile.status === "MODERATION") {
+      await notifyModerationItem("client", profile.id, `${profile.companyName} (карточка компании)`);
+    }
 
     return ok({ profile });
   } catch (error) {

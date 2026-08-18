@@ -6,6 +6,7 @@ import { getFeatureFlags } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 import { normalizeTelegramUser, verifyTelegramPayload, type TelegramLoginPayload } from "@/lib/telegram";
 import { setSessionCookie } from "@/lib/session";
+import { notifyModerationItem } from "@/lib/telegram-bot";
 
 const creatorRegistrationSchema = z.object({
   firstName: z.string().trim().min(1, "Укажите имя").max(60),
@@ -31,7 +32,7 @@ async function ensureRoleProfile(userId: string, role: Role, telegramUsername?: 
     const status = flags.moderationRequired ? "MODERATION" : flags.paymentsRequired ? "PAYMENT_PENDING" : "APPROVED";
     const isApproved = !flags.moderationRequired && !flags.paymentsRequired;
 
-    await prisma.creatorProfile.upsert({
+    const profile = await prisma.creatorProfile.upsert({
       where: { userId },
       update: {},
       create: {
@@ -55,13 +56,16 @@ async function ensureRoleProfile(userId: string, role: Role, telegramUsername?: 
         score: 70
       }
     });
+    if (status === "MODERATION") {
+      await notifyModerationItem("creator", profile.id, `${profile.firstName} ${profile.lastName} (вход/регистрация)`);
+    }
   }
 
   if (role === Role.CLIENT) {
     const status = flags.moderationRequired ? "MODERATION" : "APPROVED";
     const isApproved = !flags.moderationRequired;
 
-    await prisma.clientProfile.upsert({
+    const profile = await prisma.clientProfile.upsert({
       where: { userId },
       update: {},
       create: {
@@ -73,6 +77,9 @@ async function ensureRoleProfile(userId: string, role: Role, telegramUsername?: 
         isApproved
       }
     });
+    if (status === "MODERATION") {
+      await notifyModerationItem("client", profile.id, `${profile.companyName} (вход/регистрация)`);
+    }
   }
 }
 
@@ -90,7 +97,7 @@ async function createRoleProfileFromRegistration(
     const status = flags.moderationRequired ? "MODERATION" : flags.paymentsRequired ? "PAYMENT_PENDING" : "APPROVED";
     const isApproved = !flags.moderationRequired && !flags.paymentsRequired;
 
-    await prisma.creatorProfile.create({
+    const profile = await prisma.creatorProfile.create({
       data: {
         userId,
         firstName: data.firstName,
@@ -113,6 +120,9 @@ async function createRoleProfileFromRegistration(
         score: 70
       }
     });
+    if (status === "MODERATION") {
+      await notifyModerationItem("creator", profile.id, `${profile.firstName} ${profile.lastName} (регистрация)`);
+    }
     return;
   }
 
@@ -121,7 +131,7 @@ async function createRoleProfileFromRegistration(
     const status = flags.moderationRequired ? "MODERATION" : "APPROVED";
     const isApproved = !flags.moderationRequired;
 
-    await prisma.clientProfile.create({
+    const profile = await prisma.clientProfile.create({
       data: {
         userId,
         companyName: data.companyName,
@@ -131,6 +141,9 @@ async function createRoleProfileFromRegistration(
         isApproved
       }
     });
+    if (status === "MODERATION") {
+      await notifyModerationItem("client", profile.id, `${profile.companyName} (регистрация)`);
+    }
   }
 }
 

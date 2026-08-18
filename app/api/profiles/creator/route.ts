@@ -5,6 +5,7 @@ import { getFeatureFlags } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 import { refreshCreatorScore } from "@/lib/rating";
 import { requireUser } from "@/lib/session";
+import { notifyModerationItem } from "@/lib/telegram-bot";
 
 const activateSchema = z.object({
   firstName: z.string().trim().min(1, "Укажите имя").max(60),
@@ -51,6 +52,9 @@ export async function POST(request: Request) {
     });
 
     await refreshCreatorScore(profile.id);
+    if (status === "MODERATION") {
+      await notifyModerationItem("creator", profile.id, `${profile.firstName} ${profile.lastName} (активация роли)`);
+    }
 
     return ok({ profile }, { status: 201 });
   } catch (error) {
@@ -119,6 +123,9 @@ export async function PUT(request: Request) {
     // Заполненность анкеты — один из компонентов индекса (см. lib/rating.ts),
     // поэтому пересчитываем сразу после сохранения профиля.
     await refreshCreatorScore(profile.id);
+    if (profile.status === "MODERATION") {
+      await notifyModerationItem("creator", profile.id, `${profile.firstName} ${profile.lastName} (анкета исполнителя)`);
+    }
 
     return ok({ profile });
   } catch (error) {

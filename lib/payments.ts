@@ -13,7 +13,7 @@ import { CreatorStatus, OrderStatus, Payment, PaymentStatus } from "@prisma/clie
 import { prisma } from "@/lib/prisma";
 import { getFeatureFlags } from "@/lib/config";
 import { ApiError } from "@/lib/api";
-import { sendInvoice } from "@/lib/telegram-bot";
+import { notifyModerationItem, sendInvoice } from "@/lib/telegram-bot";
 
 type TestPaymentInput = {
   userId: string;
@@ -65,6 +65,9 @@ async function applyPaymentSideEffects(payment: Payment) {
           publishedAt: nextStatus === OrderStatus.PUBLISHED ? new Date() : null
         }
       });
+      if (nextStatus === OrderStatus.MODERATION) {
+        await notifyModerationItem("order", order.id, `«${order.title}» — оплачен, ждёт модерации`);
+      }
     }
   }
 }
