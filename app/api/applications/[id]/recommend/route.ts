@@ -4,6 +4,7 @@ import { ok, fail, ApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { refreshCreatorScore } from "@/lib/rating";
 import { requireUser } from "@/lib/session";
+import { notifyUser } from "@/lib/telegram-bot";
 
 const recommendSchema = z.object({
   recommended: z.boolean()
@@ -23,7 +24,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const application = await prisma.application.findUnique({
       where: { id },
-      include: { order: true }
+      include: { order: true, creatorProfile: { select: { userId: true } } }
     });
     if (!application) throw new ApiError(404, "Отклик не найден");
     if (application.order.clientProfileId !== user.clientProfile?.id) {
@@ -41,6 +42,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     // Рекомендация — самый весомый компонент индекса (см. lib/rating.ts),
     // пересчитываем сразу.
     await refreshCreatorScore(application.creatorProfileId);
+
+    await notifyUser(
+      application.creatorProfile.userId,
+      recommended
+        ? `Заказчик рекомендует вас по заказу «${application.order.title}» — это влияет на ваш рейтинг.`
+        : `Заказчик не рекомендует вас по заказу «${application.order.title}».`
+    );
 
     return ok({ application: updated });
   } catch (error) {

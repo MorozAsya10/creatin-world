@@ -20,6 +20,11 @@ export async function GET() {
     return ok({
       user,
       flags,
+      // Не флаг из БД (см. lib/config.ts) — просто "настроен ли на сервере
+      // токен провайдера Telegram Payments" (BotFather -> Payments), чтобы
+      // фронт показывал кнопку "Оплатить через Telegram" только когда она
+      // реально сработает (см. lib/payments.ts::createTelegramInvoicePayment).
+      telegramPaymentsEnabled: Boolean(process.env.TELEGRAM_PAYMENT_PROVIDER_TOKEN),
       packages,
       stats: {
         creators: creatorsCount,

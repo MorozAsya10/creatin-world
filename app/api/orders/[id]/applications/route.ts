@@ -5,6 +5,7 @@ import { getFeatureFlags } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 import { refreshCreatorScore } from "@/lib/rating";
 import { requireUser } from "@/lib/session";
+import { notifyUser } from "@/lib/telegram-bot";
 
 const applicationSchema = z.object({
   message: z.string().min(10),
@@ -36,7 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const order = await prisma.order.findFirst({
       where: { OR: [{ id }, { publicId: id }] },
-      include: { positions: true }
+      include: { positions: true, clientProfile: { select: { userId: true } } }
     });
     if (!order) throw new ApiError(404, "Order not found");
     if (order.status !== "PUBLISHED") {
@@ -69,6 +70,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // Отклик — один из компонентов индекса ("активность на платформе", см.
     // lib/rating.ts), пересчитываем сразу.
     await refreshCreatorScore(user.creatorProfile.id);
+
+    await notifyUser(
+      order.clientProfile.userId,
+      `Новый отклик на «${order.title}» от ${user.creatorProfile.firstName} ${user.creatorProfile.lastName}.`
+    );
 
     return ok({ application }, { status: 201 });
   } catch (error) {

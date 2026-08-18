@@ -48,6 +48,7 @@ import type {
 type Bootstrap = {
   user: ApiUser | null;
   flags: FeatureFlags;
+  telegramPaymentsEnabled: boolean;
   packages: PackagePlan[];
   stats: { creators: number; publishedOrders: number };
 };
@@ -364,6 +365,7 @@ export function PlatformShell() {
     openOrder,
     openChat,
     flags: bootstrap.flags,
+    telegramPaymentsEnabled: bootstrap.telegramPaymentsEnabled,
     activeView: view,
     switchView,
     hasCreatorProfile,
@@ -539,6 +541,10 @@ type PaneContext = {
   openOrder: (orderId: string) => void;
   openChat: (chatId: string) => void;
   flags: FeatureFlags;
+  // Настроен ли на сервере TELEGRAM_PAYMENT_PROVIDER_TOKEN — от этого зависит,
+  // показывать ли рядом с тестовой оплатой кнопку "Оплатить через Telegram"
+  // (см. CreatorSubscription и lib/payments.ts::createTelegramInvoicePayment).
+  telegramPaymentsEnabled: boolean;
   // Какой из двух кабинетов сейчас открыт (см. ACTIVE_VIEW_STORAGE_KEY) —
   // не путать с user.role, который остаётся "изначальной" ролью аккаунта.
   activeView: CabinetView;
@@ -992,16 +998,20 @@ function CreatorSubscription(ctx: PaneContext) {
   const profile = ctx.user.creatorProfile;
   const active = Boolean(profile?.membershipPaid);
 
-  async function subscribe() {
+  async function subscribe(endpoint: "/api/payments/test" | "/api/payments/telegram") {
     ctx.setBusy(true);
     try {
-      const response = await fetch("/api/payments/test", {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ purpose: "creator_membership", amountCents: CREATOR_SUBSCRIPTION_PRICE_CENTS })
       });
       if (!response.ok) {
         ctx.showToast(await responseError(response, "Не удалось оформить подписку"));
+        return;
+      }
+      if (endpoint === "/api/payments/telegram") {
+        ctx.showToast("Счёт отправлен в Telegram — откройте бота и оплатите там.");
         return;
       }
       await ctx.refreshAll();
@@ -1031,9 +1041,14 @@ function CreatorSubscription(ctx: PaneContext) {
               <li key={perk}><Check size={14} /><span>{perk}</span></li>
             ))}
           </ul>
-          <button className="btn wine" type="button" onClick={subscribe} disabled={ctx.busy || active}>
+          <button className="btn wine" type="button" onClick={() => subscribe("/api/payments/test")} disabled={ctx.busy || active}>
             {active ? "Подписка активна" : ctx.busy ? "Оформляем..." : "Оформить подписку"}
           </button>
+          {!active && ctx.telegramPaymentsEnabled ? (
+            <button className="btn" type="button" onClick={() => subscribe("/api/payments/telegram")} disabled={ctx.busy} style={{ marginTop: 8 }}>
+              Оплатить через Telegram
+            </button>
+          ) : null}
         </div>
       </div>
     </>
@@ -1283,16 +1298,24 @@ async function runAiForOrder(ctx: PaneContext, order: Order) {
   }
 }
 
-async function payOrderPublication(ctx: PaneContext, order: Order) {
+async function payOrderPublication(
+  ctx: PaneContext,
+  order: Order,
+  endpoint: "/api/payments/test" | "/api/payments/telegram" = "/api/payments/test"
+) {
   ctx.setBusy(true);
   try {
-    const response = await fetch("/api/payments/test", {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ purpose: "order_publish", orderId: order.id })
     });
     if (!response.ok) {
       ctx.showToast(await responseError(response, "Не удалось оплатить публикацию"));
+      return;
+    }
+    if (endpoint === "/api/payments/telegram") {
+      ctx.showToast("Счёт отправлен в Telegram — откройте бота и оплатите там.");
       return;
     }
     await ctx.refreshAll();
@@ -1379,6 +1402,9 @@ function ClientOrders(ctx: PaneContext) {
           <div className="job-actions">
             {order.status === "PAYMENT_PENDING" ? (
               <button className="btn wine" onClick={() => void payOrderPublication(ctx, order)} disabled={ctx.busy}>Оплатить публикацию</button>
+            ) : null}
+            {order.status === "PAYMENT_PENDING" && ctx.telegramPaymentsEnabled ? (
+              <button className="btn" onClick={() => void payOrderPublication(ctx, order, "/api/payments/telegram")} disabled={ctx.busy}>Оплатить в Telegram</button>
             ) : null}
             <button className="btn" onClick={() => ctx.openOrder(order.id)}>Открыть заказ</button>
           </div>
@@ -1472,6 +1498,9 @@ function ClientOrderDetail(ctx: PaneContext) {
           <span className={`status ${order.status === "PUBLISHED" ? "ok" : "warn"}`}>{statusLabel(order.status)}</span>
           {order.status === "PAYMENT_PENDING" ? (
             <button className="btn wine" type="button" onClick={() => void payOrderPublication(ctx, order)} disabled={ctx.busy}>Оплатить публикацию</button>
+          ) : null}
+          {order.status === "PAYMENT_PENDING" && ctx.telegramPaymentsEnabled ? (
+            <button className="btn" type="button" onClick={() => void payOrderPublication(ctx, order, "/api/payments/telegram")} disabled={ctx.busy}>Оплатить в Telegram</button>
           ) : null}
           {order.status === "PUBLISHED" ? (
             <button className="btn" type="button" onClick={() => void completeOrder(ctx, order)} disabled={ctx.busy} title="После этого можно будет оценить исполнителей">Отметить выполненным</button>

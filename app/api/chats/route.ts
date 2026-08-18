@@ -5,6 +5,7 @@ import { ok, fail, ApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { resolveViewRole } from "@/lib/dual-role";
+import { notifyUser } from "@/lib/telegram-bot";
 
 const createChatSchema = z.object({
   applicationId: z.string().min(1)
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
       where: { id: applicationId },
       include: {
         order: true,
-        creatorProfile: true,
+        creatorProfile: { select: { id: true, userId: true } },
         chat: true
       }
     });
@@ -88,6 +89,11 @@ export async function POST(request: Request) {
       where: { id: application.id },
       data: { status: "CHAT_OPEN" }
     });
+
+    await notifyUser(
+      application.creatorProfile.userId,
+      `Заказчик открыл чат по вашему отклику на «${application.order.title}». Загляните в кабинет — там продолжится переписка.`
+    );
 
     return ok({ chat }, { status: 201 });
   } catch (error) {

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ok, fail, ApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
+import { notifyUser } from "@/lib/telegram-bot";
 
 const schema = z.object({
   status: z.enum(["ACCEPTED", "DECLINED"])
@@ -20,7 +21,9 @@ export async function PATCH(
     const body = schema.parse(await request.json());
     const invitation = await prisma.invitation.findUnique({
       where: { id },
-      include: { order: { include: { positions: true } } }
+      include: {
+        order: { include: { positions: true, clientProfile: { select: { userId: true } } } }
+      }
     });
 
     if (!invitation) throw new ApiError(404, "Приглашение не найдено");
@@ -67,6 +70,13 @@ export async function PATCH(
 
       return nextInvitation;
     });
+
+    await notifyUser(
+      invitation.order.clientProfile.userId,
+      body.status === "ACCEPTED"
+        ? `Креатор принял приглашение на «${invitation.order.title}».`
+        : `Креатор отклонил приглашение на «${invitation.order.title}».`
+    );
 
     return ok({ invitation: updated });
   } catch (error) {

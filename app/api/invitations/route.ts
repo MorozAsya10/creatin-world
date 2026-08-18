@@ -5,6 +5,7 @@ import { ok, fail, ApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/session";
 import { resolveViewRole } from "@/lib/dual-role";
+import { notifyUser } from "@/lib/telegram-bot";
 
 const createSchema = z.object({
   orderId: z.string().min(1),
@@ -69,7 +70,8 @@ export async function POST(request: Request) {
     }
 
     const creator = await prisma.creatorProfile.findUnique({
-      where: { id: body.creatorProfileId }
+      where: { id: body.creatorProfileId },
+      select: { id: true, userId: true, isApproved: true }
     });
     if (!creator || !creator.isApproved) {
       throw new ApiError(404, "Креатор не найден");
@@ -111,6 +113,8 @@ export async function POST(request: Request) {
         clientProfile: true
       }
     });
+
+    await notifyUser(creator.userId, `Заказчик приглашает вас откликнуться на «${order.title}».`);
 
     return ok({ invitation }, { status: 201 });
   } catch (error) {

@@ -189,7 +189,14 @@ export async function POST(request: NextRequest) {
       throw new ApiError(409, "Этот Telegram-аккаунт уже зарегистрирован. Войдите через «Являюсь пользователем».");
     }
 
-    const role = existing?.role || normalized.role;
+    // Баг был здесь: если у аккаунта уже была роль CREATOR/CLIENT (например,
+    // человек раньше тестировал сайт под этим же Telegram), то при входе как
+    // админ role оставался прежним (existing.role), несмотря на то что
+    // canCreateAdmin/isAdminAccount выше уже разрешили сам вход — из-за этого
+    // user.role никогда не становился ADMIN, а requireUser([Role.ADMIN])
+    // (см. lib/session.ts) потом бросал 403 "Forbidden" при любом обращении
+    // к /api/admin/**. Явно форсируем ADMIN для isAdminAccount.
+    const role = isAdminAccount ? Role.ADMIN : existing?.role || normalized.role;
     const user = await prisma.user.upsert({
       where: { telegramId: normalized.telegramId },
       update: {

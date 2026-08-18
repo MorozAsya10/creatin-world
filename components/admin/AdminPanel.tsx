@@ -101,6 +101,8 @@ export function AdminPanel({ demoEnabled }: { demoEnabled: boolean }) {
   const [showOrderForm, setShowOrderForm] = useState(false);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [showPartnerForm, setShowPartnerForm] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState("");
+  const [webhookResult, setWebhookResult] = useState("");
 
   async function load() {
     const response = await fetch("/api/admin/overview");
@@ -283,6 +285,50 @@ export function AdminPanel({ demoEnabled }: { demoEnabled: boolean }) {
       setMessage(`${result.order.publicId} создан и опубликован.`);
       setShowOrderForm(false);
       await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendBroadcast(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    setError("");
+    setBroadcastResult("");
+    try {
+      const response = await fetch("/api/admin/telegram/broadcast", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          text: String(form.get("text")),
+          audience: String(form.get("audience"))
+        })
+      });
+      if (!response.ok) {
+        setError(await responseError(response, "Не удалось отправить рассылку"));
+        return;
+      }
+      const result = (await response.json()) as { result: { sent: number; failed: number } };
+      setBroadcastResult(`Отправлено: ${result.result.sent}${result.result.failed ? `, не доставлено: ${result.result.failed}` : ""}.`);
+      event.currentTarget.reset();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setupWebhook() {
+    setBusy(true);
+    setError("");
+    setWebhookResult("");
+    try {
+      const response = await fetch("/api/admin/telegram/setup-webhook", { method: "POST" });
+      if (!response.ok) {
+        setError(await responseError(response, "Не удалось настроить вебхук"));
+        return;
+      }
+      const result = (await response.json()) as { url: string };
+      setWebhookResult(`Готово: ${result.url}`);
     } finally {
       setBusy(false);
     }
@@ -505,6 +551,42 @@ export function AdminPanel({ demoEnabled }: { demoEnabled: boolean }) {
               </div>
             </div>
           )) : <div className="empty compact">Партнёрских плашек пока нет.</div>}
+        </div>
+      </div>
+
+      <div style={{ height: 14 }} />
+      <div className="panel">
+        <div className="panel-head">
+          <span className="panel-title">Telegram-рассылка</span>
+          <button className="btn" type="button" disabled={busy} onClick={() => void setupWebhook()}>
+            Настроить вебхук бота
+          </button>
+        </div>
+        <div className="panel-body">
+          <p className="page-copy" style={{ marginTop: 0 }}>
+            Сообщение уходит в бота тем пользователям, у кого привязан Telegram и не выключены уведомления.
+            Кнопка «Настроить вебхук» нужна один раз после деплоя (или при смене APP_URL/бота) — включает
+            кнопки, поддержку, пуши и оплату в боте.
+          </p>
+          {webhookResult ? <div className="notice" style={{ marginBottom: 12 }}>{webhookResult}</div> : null}
+          <form className="panel-body" style={{ padding: 0 }} onSubmit={sendBroadcast}>
+            <div className="form-grid">
+              <div className="form-row">
+                <label>Кому</label>
+                <SelectControl name="audience" defaultValue="all">
+                  <option value="all">Все пользователи</option>
+                  <option value="creators">Только креаторы</option>
+                  <option value="clients">Только заказчики</option>
+                </SelectControl>
+              </div>
+            </div>
+            <div className="form-row full">
+              <label>Текст сообщения</label>
+              <textarea name="text" required minLength={5} maxLength={4000} placeholder="Например: обновили ленту заказов, загляните в кабинет" />
+            </div>
+            <button className="btn wine" disabled={busy}>{busy ? "Отправляем..." : "Отправить в Telegram"}</button>
+            {broadcastResult ? <div className="notice" style={{ marginTop: 10 }}>{broadcastResult}</div> : null}
+          </form>
         </div>
       </div>
 

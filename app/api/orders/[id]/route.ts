@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ok, fail, ApiError } from "@/lib/api";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, requireUser } from "@/lib/session";
+import { notifyUser } from "@/lib/telegram-bot";
 
 const updateSchema = z.object({
   status: z.enum(["PUBLISHED", "REJECTED", "COMPLETED", "ARCHIVED"])
@@ -99,7 +100,8 @@ export async function PATCH(
     const { id } = await params;
     const { status } = updateSchema.parse(await request.json());
     const existing = await prisma.order.findFirst({
-      where: { OR: [{ id }, { publicId: id }] }
+      where: { OR: [{ id }, { publicId: id }] },
+      include: { clientProfile: { select: { userId: true } } }
     });
     if (!existing) throw new ApiError(404, "Заказ не найден");
 
@@ -129,6 +131,18 @@ export async function PATCH(
         entityId: order.id
       }
     });
+
+    // Модерационное решение админа стоит того, чтобы заказчик узнал о нём
+    // сразу; сам себе он его не ставит (см. проверку выше — заказчику
+    // доступен только переход в COMPLETED), поэтому дублировать пуш не может.
+    if (status === "PUBLISHED" || status === "REJECTED") {
+      await notifyUser(
+        existing.clientProfile.userId,
+        status === "PUBLISHED"
+          ? `Заказ «${existing.title}» опубликован и виден исполнителям.`
+          : `Заказ «${existing.title}» отклонён модерацией.`
+      );
+    }
 
     return ok({ order });
   } catch (error) {
