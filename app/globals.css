@@ -29,6 +29,17 @@
   --inverse-bg: #fff;
   --inverse-text: #111;
   --overlay: rgba(0, 0, 0, 0.78);
+  /* Токены "мягкого современного" редизайна (форма/полировка) — цвета и
+     шрифты выше не трогаем, добавляем только скругления/тени/motion,
+     переиспользуемые по всему globals.css вместо хардкода. */
+  --radius-sm: 10px;
+  --radius: 16px;
+  --radius-lg: 26px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.24), 0 1px 1px rgba(0, 0, 0, 0.18);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.22);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.26);
+  --shadow-wine: 0 10px 26px rgba(120, 25, 47, 0.38);
 }
 
 :root[data-theme="light"] {
@@ -54,6 +65,10 @@
   --inverse-bg: #17171a;
   --inverse-text: #ffffff;
   --overlay: rgba(18, 18, 22, 0.54);
+  --shadow-sm: 0 1px 2px rgba(23, 23, 26, 0.07), 0 1px 1px rgba(23, 23, 26, 0.05);
+  --shadow-md: 0 10px 26px rgba(23, 23, 26, 0.1), 0 2px 8px rgba(23, 23, 26, 0.06);
+  --shadow-lg: 0 24px 55px rgba(23, 23, 26, 0.14), 0 6px 16px rgba(23, 23, 26, 0.08);
+  --shadow-wine: 0 10px 24px rgba(132, 28, 55, 0.22);
 }
 
 * {
@@ -71,6 +86,8 @@ body {
 body {
   font-family: Arial, Helvetica, sans-serif;
   line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -106,6 +123,7 @@ a {
   border-bottom: 1px solid var(--line);
   background: var(--header-bg);
   backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-sm);
 }
 
 .logo {
@@ -127,13 +145,20 @@ a {
 .navbtn {
   border: 0;
   background: none;
-  padding: 10px 0;
+  padding: 10px 14px;
+  border-radius: 999px;
   color: var(--muted);
   font-size: 14px;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
 }
 
-.navbtn:hover,
+.navbtn:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
 .navbtn.active {
+  background: var(--surface2);
   color: var(--text);
 }
 
@@ -150,7 +175,9 @@ a {
 .theme-control {
   display: inline-grid;
   grid-template-columns: 1fr 1fr;
+  overflow: hidden;
   border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
   background: var(--input-bg);
 }
 
@@ -167,6 +194,7 @@ a {
   padding: 9px 14px;
   font-size: 13px;
   font-weight: 700;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
 }
 
 .theme-control button:last-child {
@@ -188,17 +216,26 @@ a {
   justify-content: center;
   gap: 8px;
   border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
   min-height: 41px;
   padding: 10px 15px;
   font-size: 13px;
   font-weight: 700;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease), border-color 0.18s var(--ease),
+    transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
 }
 
 .btn:hover {
   background: var(--text);
   color: var(--bg);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn:active {
+  transform: translateY(0);
 }
 
 .btn.wine {
@@ -211,6 +248,7 @@ a {
   border-color: var(--wine2);
   background: var(--wine2);
   color: #fff;
+  box-shadow: var(--shadow-wine);
 }
 
 .btn.ghost {
@@ -221,6 +259,7 @@ a {
 .btn.ghost:hover {
   background: var(--surface2);
   color: var(--text);
+  box-shadow: none;
 }
 
 .btn.icon {
@@ -239,6 +278,7 @@ a {
   color: var(--inverse-text);
   font-size: 11px;
   font-weight: 900;
+  box-shadow: var(--shadow-sm);
 }
 
 img.avatar {
@@ -255,7 +295,8 @@ img.avatar {
 
 .role-pill {
   border: 1px solid var(--line);
-  padding: 7px 10px;
+  border-radius: 999px;
+  padding: 7px 12px;
   color: var(--muted);
   font-size: 11px;
   letter-spacing: 0.08em;
@@ -263,12 +304,28 @@ img.avatar {
 }
 
 .hero {
+  position: relative;
   display: flex;
+  overflow: hidden;
   min-height: calc(100vh - 72px);
   flex-direction: column;
   justify-content: space-between;
   padding: 8vh 6vw 6vh;
   background: var(--bg);
+}
+
+/* Мягкое пятно света за заголовком — только форма/атмосфера, цвет тот же
+   --wine2, что и остальные акценты, просто разведён в радиальный градиент. */
+.hero::before {
+  content: "";
+  position: absolute;
+  top: -18%;
+  right: -8%;
+  z-index: -1;
+  width: min(60vw, 760px);
+  height: min(60vw, 760px);
+  background: radial-gradient(circle, color-mix(in srgb, var(--wine2) 20%, transparent) 0%, transparent 70%);
+  pointer-events: none;
 }
 
 .eyebrow {
@@ -335,6 +392,7 @@ img.avatar {
 .hero-note {
   max-width: 490px;
   border-left: 2px solid var(--wine);
+  border-radius: 2px;
   padding-left: 18px;
   color: var(--muted);
   font-size: 14px;
@@ -392,8 +450,16 @@ img.avatar {
 .eco {
   min-height: 220px;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 24px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
+}
+
+.eco:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
 }
 
 .eco .num {
@@ -422,8 +488,10 @@ img.avatar {
 .auth-card {
   width: min(760px, 100%);
   border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   padding: 34px;
+  box-shadow: var(--shadow-lg);
 }
 
 .auth-card h2 {
@@ -445,16 +513,22 @@ img.avatar {
 
 .auth-role {
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--work-bg);
   color: var(--text);
   padding: 20px;
   text-align: left;
+  transition: transform 0.18s var(--ease), border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+
+.auth-role:hover {
+  transform: translateY(-2px);
 }
 
 .auth-role:hover,
 .auth-role.selected {
   border-color: var(--wine2);
-  box-shadow: inset 0 0 0 1px var(--wine2);
+  box-shadow: inset 0 0 0 1px var(--wine2), var(--shadow-sm);
 }
 
 .auth-role b {
@@ -471,10 +545,17 @@ img.avatar {
 .telegram {
   width: 100%;
   border: 0;
+  border-radius: var(--radius-sm);
   background: var(--inverse-bg);
   color: var(--inverse-text);
   padding: 14px;
   font-weight: 900;
+  transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+
+.telegram:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .telegram-widget-slot {
@@ -506,6 +587,7 @@ img.avatar {
   gap: 10px;
   align-items: center;
   margin-bottom: 18px;
+  border-radius: var(--radius);
   background: var(--surface2);
   padding: 12px;
 }
@@ -530,7 +612,9 @@ img.avatar {
    показывается cabinet-switch-add, ведущая на активацию второй роли. */
 .cabinet-switch {
   display: flex;
+  overflow: hidden;
   border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
   margin-bottom: 18px;
 }
 
@@ -543,6 +627,7 @@ img.avatar {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
 }
 
 .cabinet-switch button + button {
@@ -558,6 +643,7 @@ img.avatar {
   display: block;
   width: 100%;
   border: 1px dashed var(--control-border);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
   margin-bottom: 18px;
@@ -565,6 +651,7 @@ img.avatar {
   text-align: left;
   font-size: 12px;
   cursor: pointer;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease), border-color 0.18s var(--ease);
 }
 
 .cabinet-switch-add:hover {
@@ -597,6 +684,7 @@ img.avatar {
   align-items: center;
   gap: 9px;
   border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
   margin: 1px 0;
@@ -681,7 +769,10 @@ img.avatar {
 
 .panel {
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .panel-head {
@@ -740,8 +831,10 @@ img.avatar {
 
 .metric {
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 18px;
+  box-shadow: var(--shadow-sm);
 }
 
 .metric span {
@@ -767,7 +860,8 @@ img.avatar {
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--control-border);
-  padding: 5px 8px;
+  border-radius: 999px;
+  padding: 5px 10px;
   font-size: 11px;
 }
 
@@ -836,8 +930,16 @@ img.avatar {
 .topic {
   min-height: 145px;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 17px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.topic:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
 }
 
 .topic h3 {
@@ -856,8 +958,16 @@ img.avatar {
   grid-template-columns: 1fr auto;
   gap: 18px;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 18px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.job-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .job-card h3 {
@@ -879,8 +989,9 @@ img.avatar {
 
 .chip {
   border: 1px solid var(--control-border);
+  border-radius: 999px;
   background: var(--surface2);
-  padding: 5px 8px;
+  padding: 5px 10px;
   font-size: 11px;
 }
 
@@ -925,8 +1036,16 @@ img.avatar {
 
 .profile-card {
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 17px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+
+.profile-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .profile-top {
@@ -965,14 +1084,16 @@ img.avatar {
 .tag {
   display: inline-block;
   border: 1px solid var(--control-border);
+  border-radius: 999px;
   margin: 3px 3px 0 0;
-  padding: 4px 7px;
+  padding: 4px 9px;
   color: var(--soft-text);
   font-size: 11px;
 }
 
 .contact-mask {
   border: 1px dashed var(--control-border);
+  border-radius: var(--radius-sm);
   margin-top: 12px;
   padding: 10px;
   color: var(--muted);
@@ -987,8 +1108,10 @@ img.avatar {
 
 .onboarding-steps {
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 18px;
+  box-shadow: var(--shadow-sm);
 }
 
 .on-step {
@@ -1052,7 +1175,9 @@ img.avatar {
    видна сразу. */
 .segmented-control {
   display: flex;
+  overflow: hidden;
   border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
 }
 
 .segmented-control button {
@@ -1064,6 +1189,7 @@ img.avatar {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
 }
 
 .segmented-control button + button {
@@ -1113,16 +1239,19 @@ textarea,
 select {
   width: 100%;
   border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
   background: var(--input-bg);
   color: var(--text);
   outline: 0;
   padding: 11px 12px;
+  transition: border-color 0.16s var(--ease), box-shadow 0.16s var(--ease);
 }
 
 input:focus,
 textarea:focus,
 select:focus {
-  border-color: var(--muted);
+  border-color: var(--wine2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--wine2) 16%, transparent);
 }
 
 .select-control {
@@ -1138,7 +1267,7 @@ select:focus {
   min-height: 43px;
   padding-right: 38px;
   border-color: var(--control-border);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: var(--input-bg);
   background-image: none;
   color: var(--text);
@@ -1202,6 +1331,7 @@ textarea {
   min-height: 150px;
   place-items: center;
   border: 1px dashed var(--control-border);
+  border-radius: var(--radius);
   background: var(--input-bg);
   color: var(--muted);
   text-align: center;
@@ -1209,10 +1339,11 @@ textarea {
 
 .upload.interactive {
   cursor: pointer;
-  transition: border-color 160ms ease, background 160ms ease;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 
 .upload.interactive:hover {
+  transform: translateY(-1px);
   border-color: var(--wine2);
   background: var(--surface2);
 }
@@ -1238,6 +1369,7 @@ textarea {
   align-items: center;
   gap: 8px;
   border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   background: var(--input-bg);
   padding: 10px;
   font-size: 12px;
@@ -1271,8 +1403,11 @@ textarea {
 
 .catalog-shell {
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   margin-bottom: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .category-row {
@@ -1320,6 +1455,7 @@ textarea {
 .empty {
   grid-column: 1 / -1;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 48px;
   text-align: center;
@@ -1358,8 +1494,10 @@ textarea {
 .order-info {
   min-width: 0;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 18px;
+  box-shadow: var(--shadow-sm);
 }
 
 .order-info h3 {
@@ -1386,9 +1524,11 @@ textarea {
 .ai-box {
   min-width: 0;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
   padding: 18px;
+  box-shadow: var(--shadow-sm);
 }
 
 .ai-box h3 {
@@ -1467,8 +1607,11 @@ textarea {
   display: grid;
   grid-template-columns: 260px 1fr;
   height: 600px;
+  overflow: hidden;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .chat-list {
@@ -1580,6 +1723,7 @@ textarea {
 .bubble {
   max-width: 72%;
   margin-bottom: 10px;
+  border-radius: var(--radius-sm);
   background: var(--surface2);
   padding: 11px 13px;
 }
@@ -1630,9 +1774,15 @@ textarea {
   background: var(--surface);
   color: var(--text);
   padding: 22px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   text-align: left;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.package:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 
 .package.selected {
@@ -1696,7 +1846,13 @@ textarea {
 
 .perks li svg {
   flex-shrink: 0;
-  margin-top: 2px;
+  margin-top: 1px;
+  padding: 3px;
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wine2) 14%, transparent);
   color: var(--wine2);
 }
 
@@ -1735,6 +1891,7 @@ textarea {
 .loading,
 .notice {
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   color: var(--muted);
   padding: 22px;
@@ -1913,13 +2070,19 @@ textarea {
 .trust-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   color: var(--muted);
   font-size: 13px;
 }
 
 .trust-item svg {
   flex: none;
+  padding: 6px;
+  width: 28px;
+  height: 28px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wine2) 14%, transparent);
   color: var(--wine2);
 }
 
@@ -1936,8 +2099,17 @@ textarea {
 .audience-card {
   min-width: 0;
   border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   padding: 32px;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.24s var(--ease), box-shadow 0.24s var(--ease);
+}
+
+.audience-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
 }
 
 .audience-card .eyebrow {
@@ -1974,7 +2146,13 @@ textarea {
 
 .checklist svg {
   flex: none;
-  margin-top: 2px;
+  margin-top: 1px;
+  padding: 3px;
+  width: 22px;
+  height: 22px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--wine2) 14%, transparent);
   color: var(--wine2);
 }
 
@@ -1984,8 +2162,10 @@ textarea {
   gap: 54px;
   align-items: center;
   border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   padding: 46px;
+  box-shadow: var(--shadow-md);
 }
 
 .feature-band h3 {
@@ -2011,8 +2191,15 @@ textarea {
   align-items: center;
   gap: 14px;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--work-bg);
   padding: 15px 16px;
+  transition: transform 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.feature-row:hover {
+  transform: translateX(3px);
+  border-color: var(--wine2);
 }
 
 .feature-row b {
@@ -2033,6 +2220,7 @@ textarea {
   place-items: center;
   width: 30px;
   height: 30px;
+  border-radius: 999px;
   background: var(--wine);
   color: #fff;
   font-size: 12px;
@@ -2046,7 +2234,10 @@ textarea {
   justify-content: space-between;
   gap: 26px;
   background: var(--wine);
+  margin: 46px 5vw 90px;
   padding: 64px 5vw;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
   color: #fff;
 }
 
@@ -2109,7 +2300,9 @@ textarea {
 .photo-tile {
   position: relative;
   overflow: hidden;
+  border-radius: var(--radius);
   background: var(--surface2);
+  box-shadow: var(--shadow-sm);
 }
 
 .photo-tile img {
@@ -2129,7 +2322,7 @@ textarea {
 .hero-collage {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 8px;
+  gap: 10px;
   margin-top: 36px;
 }
 
@@ -2155,6 +2348,14 @@ textarea {
   aspect-ratio: 4 / 5;
   overflow: hidden;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.28s var(--ease), box-shadow 0.28s var(--ease);
+}
+
+.category-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
 }
 
 .category-card img {
@@ -2232,10 +2433,12 @@ textarea {
   width: 28px;
   height: 28px;
   border: 2px solid var(--section-bg);
+  border-radius: 50%;
   background: var(--wine);
   color: #fff;
   font-size: 12px;
   font-weight: 800;
+  box-shadow: var(--shadow-sm);
 }
 
 .rank-card b {
@@ -2268,6 +2471,11 @@ textarea {
   position: relative;
   border-left: 1px solid var(--line);
   padding: 28px 22px 4px;
+  transition: transform 0.22s var(--ease);
+}
+
+.timeline-step:hover {
+  transform: translateY(-3px);
 }
 
 .timeline-step:first-child {
@@ -2281,6 +2489,7 @@ textarea {
   left: 0;
   width: 46px;
   height: 3px;
+  border-radius: 999px;
   background: var(--wine2);
 }
 
@@ -2336,8 +2545,17 @@ textarea {
   display: flex;
   min-width: 0;
   flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.22s var(--ease), box-shadow 0.22s var(--ease);
+}
+
+.partner-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
 }
 
 .partner-media {
@@ -2539,6 +2757,7 @@ textarea {
   }
 
   .cta-band {
+    margin: 30px 4vw 60px;
     padding: 44px 5vw;
   }
 
@@ -2605,7 +2824,9 @@ textarea {
   }
 
   .cta-band {
+    margin: 22px 14px 46px;
     padding: 34px 18px;
+    border-radius: var(--radius);
     text-align: left;
   }
 
