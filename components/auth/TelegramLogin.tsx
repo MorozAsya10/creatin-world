@@ -8,6 +8,11 @@ import { SPECIALIZATION_SUGGESTIONS } from "@/lib/presentation";
 type LoginRole = "creator" | "client";
 type AuthMode = "login" | "register";
 type Step = "choose" | "register-form" | "widget";
+// Для тайла "Я заказчик" — обычная компания или уже существующий на
+// платформе креатор, который хочет тем же Telegram-аккаунтом завести ещё и
+// карточку заказчика (см. RoleActivationPanel в PlatformShell.tsx — прямое
+// направление "креатор -> заказчик" убрано из кабинета и перенесено сюда).
+type ClientKind = "organization" | "creator";
 
 type TelegramWidgetUser = {
   id: string;
@@ -116,6 +121,7 @@ export function TelegramLogin({ demoEnabled }: { demoEnabled: boolean }) {
   const registrationDraftRef = useRef<Record<string, unknown> | undefined>(undefined);
   const initialRole = (params.get("role") as LoginRole) || "creator";
   const [role, setRole] = useState<LoginRole>(["creator", "client"].includes(initialRole) ? initialRole : "creator");
+  const [clientKind, setClientKind] = useState<ClientKind>("organization");
   const [step, setStep] = useState<Step>("choose");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -269,6 +275,7 @@ export function TelegramLogin({ demoEnabled }: { demoEnabled: boolean }) {
                 setRole(key);
                 setError("");
                 setStep("choose");
+                setClientKind("organization");
                 router.replace(`/login?role=${key}`, { scroll: false });
               }}
             >
@@ -278,15 +285,40 @@ export function TelegramLogin({ demoEnabled }: { demoEnabled: boolean }) {
           ))}
         </div>
 
+        {role === "client" ? (
+          <div className="form-row" style={{ marginTop: 12 }}>
+            <label>Кто размещает заказ</label>
+            <SelectControl
+              value={clientKind}
+              onChange={(event) => {
+                setClientKind(event.target.value as ClientKind);
+                setError("");
+                setStep("choose");
+              }}
+            >
+              <option value="organization">Организация</option>
+              <option value="creator">Я уже креатор на платформе</option>
+            </SelectControl>
+            {clientKind === "creator" ? (
+              <small className="field-hint">
+                Войдёте тем же Telegram-аккаунтом, что и в анкете креатора — карточка заказчика
+                добавится к нему же, кабинеты можно будет переключать без повторного входа.
+              </small>
+            ) : null}
+          </div>
+        ) : null}
+
         {error ? <div className="notice error-notice" role="alert">{error}</div> : null}
 
         {step === "choose" ? (
           <div className="hero-actions">
-            <button className="btn wine" type="button" onClick={chooseLogin} disabled={loading}>
-              Являюсь пользователем
-            </button>
+            {role === "client" && clientKind === "creator" ? null : (
+              <button className="btn wine" type="button" onClick={chooseLogin} disabled={loading}>
+                Являюсь пользователем
+              </button>
+            )}
             <button className="btn" type="button" onClick={chooseRegister} disabled={loading}>
-              Зарегистрироваться
+              {role === "client" && clientKind === "creator" ? "Тоже разместить заказ" : "Зарегистрироваться"}
             </button>
           </div>
         ) : null}
@@ -294,7 +326,13 @@ export function TelegramLogin({ demoEnabled }: { demoEnabled: boolean }) {
         {step === "register-form" ? (
           <form className="panel" onSubmit={submitRegistration} style={{ marginTop: 16 }}>
             <div className="panel-head">
-              <span className="panel-title">Анкета {role === "creator" ? "креатора" : "заказчика"}</span>
+              <span className="panel-title">
+                {role === "creator"
+                  ? "Анкета креатора"
+                  : clientKind === "creator"
+                    ? "Заодно разместите заказ"
+                    : "Анкета заказчика"}
+              </span>
               <button className="btn ghost" type="button" onClick={() => setStep("choose")} disabled={loading}>
                 Назад
               </button>

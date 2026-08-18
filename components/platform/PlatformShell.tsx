@@ -392,11 +392,15 @@ export function PlatformShell() {
             <button type="button" className={view === "CREATOR" ? "active" : ""} onClick={() => switchView("CREATOR")}>Креатор</button>
             <button type="button" className={view === "CLIENT" ? "active" : ""} onClick={() => switchView("CLIENT")}>Заказчик</button>
           </div>
-        ) : (
+        ) : view === "CLIENT" && !hasCreatorProfile ? (
+          // Обратное направление (заказчик заводит анкету креатора) остаётся
+          // тут же, в кабинете. Прямое (креатор размещает заказ) теперь
+          // выбирается на экране входа — см. TelegramLogin.tsx, "Я заказчик"
+          // -> "Уже креатор на платформе".
           <button type="button" className="cabinet-switch-add" onClick={() => openPane("settings")}>
-            {view === "CREATOR" ? "+ Тоже разместить заказ" : "+ Тоже откликаться как креатор"}
+            + Тоже откликаться как креатор
           </button>
-        )}
+        ) : null}
         {Object.entries(groupedMenu).map(([group, items]) => (
           <div className={`side-group ${group === "Финансы" ? "bottom" : ""}`} key={group}>
             <div className="side-title">{group}</div>
@@ -1810,40 +1814,16 @@ function SettingsPane(ctx: PaneContext) {
   );
 }
 
-// Активация второй роли на этом же аккаунте (см. hasRole в lib/session.ts
-// и POST /api/profiles/{creator,client}) — без выхода и повторного входа
-// через Telegram-виджет, коротким переиспользуемым куском анкеты. Если обе
-// роли уже есть — просто ничего не рендерим здесь, переключатель между ними
-// уже виден в шапке сайдбара.
+// Активация роли креатора на этом же аккаунте заказчика (см. hasRole в
+// lib/session.ts и POST /api/profiles/creator) — без выхода и повторного
+// входа через Telegram-виджет. Обратное направление (креатор заводит
+// карточку заказчика) теперь выбирается на экране входа, см.
+// components/auth/TelegramLogin.tsx ("Я заказчик" -> "Уже креатор на
+// платформе"), а не здесь.
 function RoleActivationPanel({ ctx }: { ctx: PaneContext }) {
   const [busy, setBusy] = useState(false);
 
-  if (ctx.hasCreatorProfile && ctx.hasClientProfile) return null;
-
-  async function activateClient(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy(true);
-    try {
-      const response = await fetch("/api/profiles/client", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          companyName: String(form.get("companyName")),
-          industry: String(form.get("industry")),
-          contactName: String(form.get("contactName"))
-        })
-      });
-      if (!response.ok) {
-        ctx.showToast(await responseError(response, "Не удалось активировать роль заказчика"));
-        return;
-      }
-      ctx.showToast("Готово — теперь можно размещать заказы");
-      ctx.switchView("CLIENT");
-    } finally {
-      setBusy(false);
-    }
-  }
+  if (!ctx.hasClientProfile || ctx.hasCreatorProfile) return null;
 
   async function activateCreator(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1875,58 +1855,40 @@ function RoleActivationPanel({ ctx }: { ctx: PaneContext }) {
   const [defaultFirstName, defaultLastName] = ctx.user.name.split(/\s+/, 2);
 
   return (
-    <form
-      className="panel"
-      style={{ marginTop: 14 }}
-      onSubmit={ctx.hasClientProfile ? activateCreator : activateClient}
-    >
+    <form className="panel" style={{ marginTop: 14 }} onSubmit={activateCreator}>
       <div className="panel-head">
-        <span className="panel-title">{ctx.hasClientProfile ? "Тоже откликаться как креатор" : "Тоже разместить заказ"}</span>
+        <span className="panel-title">Тоже откликаться как креатор</span>
       </div>
       <div className="panel-body">
         <p className="page-copy" style={{ marginTop: 0 }}>
-          {ctx.hasClientProfile
-            ? "Заведёт анкету креатора на этом же аккаунте — сможете переключаться между кабинетами без повторного входа."
-            : "Заведёт карточку компании на этом же аккаунте — сможете переключаться между кабинетами без повторного входа."}
+          Заведёт анкету креатора на этом же аккаунте — сможете переключаться между кабинетами без повторного входа.
         </p>
-        {ctx.hasClientProfile ? (
-          <>
-            <div className="form-grid">
-              <div className="form-row"><label>Имя</label><input name="firstName" required minLength={1} defaultValue={defaultFirstName || ""} /></div>
-              <div className="form-row"><label>Фамилия</label><input name="lastName" required minLength={1} defaultValue={defaultLastName || ""} /></div>
-            </div>
-            <div className="form-grid">
-              <div className="form-row">
-                <label>Категория</label>
-                <SelectControl name="category" defaultValue="Дизайн">
-                  <option>Дизайн</option>
-                  <option>Видео</option>
-                  <option>Тексты</option>
-                  <option>Маркетинг</option>
-                  <option>Креатив</option>
-                  <option>AI</option>
-                  <option>Менеджмент</option>
-                </SelectControl>
-              </div>
-              <div className="form-row">
-                <label>Основная специализация</label>
-                <input name="primaryRole" required minLength={2} list="activation-specialization-suggestions" placeholder="Выберите из списка или впишите свою" />
-                <datalist id="activation-specialization-suggestions">
-                  {SPECIALIZATION_SUGGESTIONS.map((item) => <option value={item} key={item} />)}
-                </datalist>
-              </div>
-            </div>
-            <div className="form-row"><label>Опыт, лет</label><input name="experienceYears" type="number" min={0} required defaultValue={1} /></div>
-          </>
-        ) : (
-          <>
-            <div className="form-row"><label>Компания</label><input name="companyName" required minLength={2} placeholder="Название компании" /></div>
-            <div className="form-grid">
-              <div className="form-row"><label>Сфера деятельности</label><input name="industry" required minLength={2} placeholder="Например, Fashion / E-commerce" /></div>
-              <div className="form-row"><label>Контактное лицо</label><input name="contactName" required minLength={2} defaultValue={ctx.user.name} /></div>
-            </div>
-          </>
-        )}
+        <div className="form-grid">
+          <div className="form-row"><label>Имя</label><input name="firstName" required minLength={1} defaultValue={defaultFirstName || ""} /></div>
+          <div className="form-row"><label>Фамилия</label><input name="lastName" required minLength={1} defaultValue={defaultLastName || ""} /></div>
+        </div>
+        <div className="form-grid">
+          <div className="form-row">
+            <label>Категория</label>
+            <SelectControl name="category" defaultValue="Дизайн">
+              <option>Дизайн</option>
+              <option>Видео</option>
+              <option>Тексты</option>
+              <option>Маркетинг</option>
+              <option>Креатив</option>
+              <option>AI</option>
+              <option>Менеджмент</option>
+            </SelectControl>
+          </div>
+          <div className="form-row">
+            <label>Основная специализация</label>
+            <input name="primaryRole" required minLength={2} list="activation-specialization-suggestions" placeholder="Выберите из списка или впишите свою" />
+            <datalist id="activation-specialization-suggestions">
+              {SPECIALIZATION_SUGGESTIONS.map((item) => <option value={item} key={item} />)}
+            </datalist>
+          </div>
+        </div>
+        <div className="form-row"><label>Опыт, лет</label><input name="experienceYears" type="number" min={0} required defaultValue={1} /></div>
         <button className="btn wine" disabled={busy} style={{ marginTop: 12 }}>{busy ? "Активируем..." : "Активировать"}</button>
       </div>
     </form>
