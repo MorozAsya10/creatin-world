@@ -29,6 +29,14 @@
   --inverse-bg: #fff;
   --inverse-text: #111;
   --overlay: rgba(0, 0, 0, 0.78);
+  /* Скругления карточек/кнопок нового визуального языка (см. пример
+     референс-сайта: скруглённые карточки, цветные фото, pill-фильтры,
+     круглые кнопки/аватары). Тени сознательно минимальные — плоский стиль
+     на тонких границах, а не "мягкие SaaS-тени". */
+  --radius-sm: 10px;
+  --radius: 18px;
+  --radius-lg: 24px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 :root[data-theme="light"] {
@@ -54,6 +62,7 @@
   --inverse-bg: #17171a;
   --inverse-text: #ffffff;
   --overlay: rgba(18, 18, 22, 0.54);
+  --shadow-card: 0 1px 2px rgba(23, 23, 26, 0.06);
 }
 
 * {
@@ -167,7 +176,9 @@ a {
 .theme-control {
   display: inline-grid;
   grid-template-columns: 1fr 1fr;
+  overflow: hidden;
   border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
   background: var(--input-bg);
 }
 
@@ -205,12 +216,14 @@ a {
   justify-content: center;
   gap: 8px;
   border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text);
   min-height: 41px;
-  padding: 10px 15px;
+  padding: 10px 18px;
   font-size: 13px;
   font-weight: 700;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
 }
 
 .btn:hover {
@@ -245,6 +258,47 @@ a {
   padding: 0;
 }
 
+/* Круглая кнопка-стрелка ("смотреть профиль" на карточке креатора,
+   и т.п.) — компактная альтернатива обычной .btn там, где рядом уже есть
+   текстовый CTA и нужен только один явный акцент-жест. */
+.circle-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--wine);
+  color: #fff;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.circle-btn:hover {
+  background: var(--wine2);
+  transform: scale(1.06);
+}
+
+/* Текстовая ссылка со стрелкой ("Весь каталог →", "01 ↗" на карточках
+   категорий) — стрелка сдвигается на hover. */
+.link-arrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.link-arrow svg {
+  transition: transform 160ms ease;
+}
+
+.link-arrow:hover svg {
+  transform: translate(3px, -3px);
+}
+
 .avatar {
   display: grid;
   width: 38px;
@@ -272,7 +326,8 @@ img.avatar {
 
 .role-pill {
   border: 1px solid var(--line);
-  padding: 7px 10px;
+  border-radius: 999px;
+  padding: 7px 12px;
   color: var(--muted);
   font-size: 11px;
   letter-spacing: 0.08em;
@@ -409,6 +464,7 @@ img.avatar {
 .eco {
   min-height: 220px;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 28px;
   transition: border-color 180ms ease;
@@ -444,6 +500,7 @@ img.avatar {
 .auth-card {
   width: min(760px, 100%);
   border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   padding: 34px;
 }
@@ -702,7 +759,9 @@ img.avatar {
 }
 
 .panel {
+  overflow: hidden;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
 }
 
@@ -762,6 +821,7 @@ img.avatar {
 
 .metric {
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 18px;
 }
@@ -789,7 +849,8 @@ img.avatar {
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--control-border);
-  padding: 5px 8px;
+  border-radius: 999px;
+  padding: 5px 10px;
   font-size: 11px;
 }
 
@@ -858,6 +919,7 @@ img.avatar {
 .topic {
   min-height: 145px;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 20px;
   transition: border-color 180ms ease;
@@ -883,6 +945,7 @@ img.avatar {
   grid-template-columns: 1fr auto;
   gap: 18px;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 20px;
   transition: border-color 180ms ease;
@@ -911,8 +974,9 @@ img.avatar {
 
 .chip {
   border: 1px solid var(--control-border);
+  border-radius: 999px;
   background: var(--surface2);
-  padding: 5px 8px;
+  padding: 5px 10px;
   font-size: 11px;
 }
 
@@ -956,14 +1020,38 @@ img.avatar {
 }
 
 .profile-card {
+  overflow: hidden;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
-  padding: 20px;
   transition: border-color 180ms ease;
 }
 
 .profile-card:hover {
   border-color: var(--wine2);
+}
+
+/* Фото-баннер карточки креатора в публичном каталоге (см.
+   components/catalog/CreatorCatalog.tsx) — всегда цветное, во всю ширину
+   карточки. Если фото нет — крупные инициалы на нейтральном фоне вместо
+   пустоты. */
+.profile-card-media {
+  display: grid;
+  aspect-ratio: 4 / 3;
+  place-items: center;
+  overflow: hidden;
+  background: var(--surface2);
+}
+
+.profile-card-media img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-card-body {
+  padding: 18px;
 }
 
 .profile-top {
@@ -993,6 +1081,10 @@ img.avatar {
   flex: 1 1 130px;
 }
 
+.profile-actions .circle-btn {
+  margin-left: auto;
+}
+
 .score {
   margin-left: auto;
   color: #d76a82;
@@ -1002,14 +1094,16 @@ img.avatar {
 .tag {
   display: inline-block;
   border: 1px solid var(--control-border);
+  border-radius: 999px;
   margin: 3px 3px 0 0;
-  padding: 4px 7px;
+  padding: 4px 9px;
   color: var(--soft-text);
   font-size: 11px;
 }
 
 .contact-mask {
   border: 1px dashed var(--control-border);
+  border-radius: var(--radius-sm);
   margin-top: 12px;
   padding: 10px;
   color: var(--muted);
@@ -1024,6 +1118,7 @@ img.avatar {
 
 .onboarding-steps {
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 18px;
 }
@@ -1150,10 +1245,12 @@ textarea,
 select {
   width: 100%;
   border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
   background: var(--input-bg);
   color: var(--text);
   outline: 0;
   padding: 11px 12px;
+  transition: border-color 160ms ease;
 }
 
 input:focus,
@@ -1175,7 +1272,7 @@ select:focus {
   min-height: 43px;
   padding-right: 38px;
   border-color: var(--control-border);
-  border-radius: 2px;
+  border-radius: var(--radius-sm);
   background: var(--input-bg);
   background-image: none;
   color: var(--text);
@@ -1239,6 +1336,7 @@ textarea {
   min-height: 150px;
   place-items: center;
   border: 1px dashed var(--control-border);
+  border-radius: var(--radius);
   background: var(--input-bg);
   color: var(--muted);
   text-align: center;
@@ -1275,6 +1373,7 @@ textarea {
   align-items: center;
   gap: 8px;
   border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   background: var(--input-bg);
   padding: 10px;
   font-size: 12px;
@@ -1307,29 +1406,39 @@ textarea {
 }
 
 .catalog-shell {
+  overflow: hidden;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   margin-bottom: 16px;
 }
 
 .category-row {
   display: flex;
-  overflow: auto;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 16px;
   border-bottom: 1px solid var(--line);
 }
 
 .catbtn {
-  border: 0;
-  border-right: 1px solid var(--line);
-  background: var(--surface);
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  background: transparent;
   color: var(--muted);
-  padding: 14px 16px;
+  padding: 9px 15px;
   white-space: nowrap;
   font-size: 13px;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
 }
 
-.catbtn:hover,
+.catbtn:hover {
+  border-color: var(--text);
+  color: var(--text);
+}
+
 .catbtn.active {
+  border-color: var(--wine);
   background: var(--wine);
   color: #fff;
 }
@@ -1357,6 +1466,7 @@ textarea {
 .empty {
   grid-column: 1 / -1;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 48px;
   text-align: center;
@@ -1395,6 +1505,7 @@ textarea {
 .order-info {
   min-width: 0;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   padding: 18px;
 }
@@ -1423,6 +1534,7 @@ textarea {
 .ai-box {
   min-width: 0;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
   padding: 18px;
@@ -1504,7 +1616,9 @@ textarea {
   display: grid;
   grid-template-columns: 260px 1fr;
   height: 600px;
+  overflow: hidden;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
 }
 
@@ -1617,6 +1731,7 @@ textarea {
 .bubble {
   max-width: 72%;
   margin-bottom: 10px;
+  border-radius: var(--radius-sm);
   background: var(--surface2);
   padding: 11px 13px;
 }
@@ -1667,7 +1782,7 @@ textarea {
   background: var(--surface);
   color: var(--text);
   padding: 22px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   text-align: left;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -1772,6 +1887,7 @@ textarea {
 .loading,
 .notice {
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
   color: var(--muted);
   padding: 22px;
@@ -1972,7 +2088,9 @@ textarea {
 
 .audience-card {
   min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   padding: 38px;
   transition: border-color 180ms ease;
@@ -1982,7 +2100,8 @@ textarea {
   border-color: var(--wine2);
 }
 
-.audience-card .eyebrow {
+.audience-card .role-pill {
+  display: inline-block;
   margin-bottom: 16px;
 }
 
@@ -1996,6 +2115,43 @@ textarea {
   margin: 0 0 22px;
   color: var(--muted);
   font-size: 15px;
+}
+
+/* Вторая карточка роли (обычно "Я заказчик") — сплошной wine-фон, всё
+   содержимое переключается на светлые тона поверх акцентного цвета. */
+.audience-card.accent {
+  border-color: var(--wine);
+  background: var(--wine);
+  color: #fff;
+}
+
+.audience-card.accent .role-pill {
+  border-color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.audience-card.accent > p {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.audience-card.accent .checklist li {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.audience-card.accent .checklist svg {
+  color: #fff;
+}
+
+.audience-card.accent .btn.wine {
+  border-color: #fff;
+  background: #fff;
+  color: var(--wine);
+}
+
+.audience-card.accent .btn.wine:hover {
+  border-color: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--wine);
 }
 
 .checklist {
@@ -2026,6 +2182,7 @@ textarea {
   gap: 60px;
   align-items: center;
   border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   padding: 54px;
 }
@@ -2053,6 +2210,7 @@ textarea {
   align-items: center;
   gap: 14px;
   border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
   background: var(--work-bg);
   padding: 15px 16px;
 }
@@ -2075,6 +2233,7 @@ textarea {
   place-items: center;
   width: 30px;
   height: 30px;
+  border-radius: 50%;
   background: var(--wine);
   color: #fff;
   font-size: 12px;
@@ -2088,7 +2247,9 @@ textarea {
   justify-content: space-between;
   gap: 26px;
   background: var(--wine);
+  margin: 46px 5vw 90px;
   padding: 64px 5vw;
+  border-radius: var(--radius-lg);
   color: #fff;
 }
 
@@ -2146,11 +2307,12 @@ textarea {
   background-position: center;
 }
 
-/* ---------- editorial photo treatment (top100awards-inspired) ---------- */
+/* ---------- фото: всегда цветные, скруглённые тайлы ---------- */
 
 .photo-tile {
   position: relative;
   overflow: hidden;
+  border-radius: var(--radius);
   background: var(--surface2);
 }
 
@@ -2159,12 +2321,10 @@ textarea {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: grayscale(1) contrast(1.05);
-  transition: filter 320ms ease, transform 420ms ease;
+  transition: transform 420ms ease;
 }
 
 .photo-tile:hover img {
-  filter: grayscale(0);
   transform: scale(1.045);
 }
 
@@ -2190,114 +2350,155 @@ textarea {
   gap: 16px;
 }
 
+/* Карточка категории — номер + название + короткое описание, без фото
+   (см. референс: award/портфолио-стиль плиток каталога). Одна карточка на
+   странице получает .category-card.accent — сплошной wine-фон, остальные
+   остаются на surface с тонкой границей. */
 .category-card {
-  display: block;
-  position: relative;
-  min-width: 0;
-  aspect-ratio: 4 / 5;
-  overflow: hidden;
-  border: 1px solid var(--line);
-}
-
-.category-card img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: grayscale(1) contrast(1.05);
-  transition: filter 320ms ease, transform 420ms ease;
-}
-
-.category-card:hover img {
-  filter: grayscale(0);
-  transform: scale(1.045);
-}
-
-.category-overlay {
-  position: absolute;
-  inset: 0;
   display: flex;
+  min-width: 0;
+  min-height: 190px;
   flex-direction: column;
-  justify-content: flex-end;
-  padding: 16px;
-  background: linear-gradient(180deg, transparent 42%, rgba(10, 8, 9, 0.82) 100%);
+  justify-content: space-between;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 20px;
+  color: var(--text);
+  transition: border-color 180ms ease, transform 180ms ease;
+}
+
+.category-card:hover {
+  border-color: var(--wine2);
+  transform: translateY(-2px);
+}
+
+.category-card.accent {
+  border-color: var(--wine);
+  background: var(--wine);
   color: #fff;
 }
 
-.category-overlay .num {
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 11px;
-  letter-spacing: 0.1em;
+.category-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.category-overlay b {
+.category-card .num {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.category-card.accent .num {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.category-card-arrow {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  transition: transform 180ms ease;
+}
+
+.category-card:hover .category-card-arrow {
+  transform: translate(2px, -2px);
+}
+
+.category-card.accent .category-card-arrow {
+  color: #fff;
+}
+
+.category-card b {
   display: block;
-  margin-top: 6px;
-  font-size: 21px;
+  margin-top: 40px;
+  font-size: 24px;
   letter-spacing: -0.02em;
 }
 
-.rank-strip {
-  display: flex;
-  gap: 22px;
-  overflow-x: auto;
-  padding-bottom: 10px;
+.category-card span {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
-.rank-card {
+.category-card.accent span {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.rank-list-head {
   display: flex;
-  flex: 0 0 128px;
-  flex-direction: column;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.rank-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  column-gap: 40px;
+  border-top: 1px solid var(--line);
+}
+
+.rank-row {
+  display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 10px;
-  text-align: center;
+  gap: 14px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--line);
   color: var(--text);
 }
 
-.rank-card-avatar {
-  position: relative;
-  width: 104px;
+.rank-row:nth-child(odd) {
+  padding-right: 24px;
+  border-right: 1px solid var(--line);
 }
 
-.avatar-xl {
-  width: 104px;
-  height: 104px;
-  font-size: 27px;
+.rank-row:nth-child(even) {
+  padding-left: 24px;
 }
 
-.rank-badge {
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 2px solid var(--section-bg);
-  background: var(--wine);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 800;
+.rank-index {
+  flex: none;
+  width: 22px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
-.rank-card b {
-  display: -webkit-box;
+.rank-row-info {
   overflow: hidden;
-  width: 100%;
-  font-size: 14px;
-  line-height: 1.25;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  min-width: 0;
+  flex: 1;
 }
 
-.rank-card span {
+.rank-row-info b {
   display: block;
   overflow: hidden;
-  width: 100%;
-  color: var(--muted);
-  font-size: 11px;
+  font-size: 15px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.rank-row-info span {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.rank-score {
+  flex: none;
+  font-size: 16px;
+  font-weight: 800;
 }
 
 .timeline {
@@ -2345,27 +2546,6 @@ textarea {
   font-size: 14px;
 }
 
-.audience-card-media {
-  position: relative;
-  overflow: hidden;
-  margin: -38px -38px 24px;
-  aspect-ratio: 16 / 7;
-}
-
-.audience-card-media img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: grayscale(1) contrast(1.05);
-  transition: filter 320ms ease, transform 420ms ease;
-}
-
-.audience-card:hover .audience-card-media img {
-  filter: grayscale(0);
-  transform: scale(1.045);
-}
-
 /* ---------- partners / ad tiles ---------- */
 
 .partner-grid {
@@ -2378,8 +2558,15 @@ textarea {
   display: flex;
   min-width: 0;
   flex-direction: column;
+  overflow: hidden;
   border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: var(--surface);
+  transition: border-color 180ms ease;
+}
+
+.partner-card:hover {
+  border-color: var(--wine2);
 }
 
 .partner-media {
@@ -2393,12 +2580,10 @@ textarea {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  filter: grayscale(1) contrast(1.05);
-  transition: filter 320ms ease, transform 420ms ease;
+  transition: transform 420ms ease;
 }
 
 .partner-card:hover .partner-media img {
-  filter: grayscale(0);
   transform: scale(1.045);
 }
 
@@ -2477,6 +2662,66 @@ textarea {
   margin-top: 3px;
   color: var(--muted);
   font-size: 12px;
+}
+
+/* ---------- глобальный футер (публичные страницы) ---------- */
+
+.site-footer {
+  border-top: 1px solid var(--line);
+  background: var(--section-bg);
+  padding: 54px 5vw 26px;
+}
+
+.footer-top {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr auto;
+  gap: 32px;
+  align-items: start;
+}
+
+.footer-brand p {
+  max-width: 260px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.footer-col .eyebrow {
+  margin-bottom: 14px;
+}
+
+.footer-col ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.footer-col a {
+  color: var(--text);
+  font-size: 14px;
+  transition: color 160ms ease;
+}
+
+.footer-col a:hover {
+  color: var(--wine2);
+}
+
+.footer-copyright {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.footer-bottom {
+  margin-top: 36px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
 }
 
 @media (max-width: 1150px) {
@@ -2581,6 +2826,7 @@ textarea {
   }
 
   .cta-band {
+    margin: 30px 4vw 60px;
     padding: 44px 5vw;
   }
 
@@ -2604,7 +2850,7 @@ textarea {
 
   .header-actions .public-secondary,
   .header-actions .contextual-cta,
-  .role-pill {
+  .header-actions .role-pill {
     display: none;
   }
 
@@ -2624,6 +2870,15 @@ textarea {
 
   .hero h1 {
     font-size: 58px;
+  }
+
+  .footer-top {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 28px;
+  }
+
+  .footer-copyright {
+    text-align: left;
   }
 
   .hero-stats,
@@ -2647,7 +2902,9 @@ textarea {
   }
 
   .cta-band {
+    margin: 22px 14px 46px;
     padding: 34px 18px;
+    border-radius: var(--radius);
     text-align: left;
   }
 
@@ -2885,23 +3142,27 @@ textarea {
     gap: 10px;
   }
 
-  .category-overlay b {
-    font-size: 18px;
+  .category-card {
+    min-height: 150px;
+    padding: 16px;
   }
 
-  .rank-strip {
-    gap: 14px;
+  .category-card b {
+    margin-top: 26px;
+    font-size: 19px;
   }
 
-  .rank-card {
-    flex: 0 0 96px;
+  .rank-list {
+    grid-template-columns: 1fr;
   }
 
-  .rank-card-avatar,
-  .avatar-xl {
-    width: 84px;
-    height: 84px;
-    font-size: 21px;
+  .rank-row:nth-child(odd) {
+    padding-right: 0;
+    border-right: 0;
+  }
+
+  .rank-row:nth-child(even) {
+    padding-left: 0;
   }
 
   .timeline-num {
@@ -2915,10 +3176,6 @@ textarea {
 
   .audience-card {
     padding: 20px;
-  }
-
-  .audience-card-media {
-    margin: -20px -20px 16px;
   }
 
   .audience-card h3 {

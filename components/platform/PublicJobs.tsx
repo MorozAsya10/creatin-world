@@ -40,38 +40,41 @@ export function PublicJobs() {
       .finally(() => setLoading(false));
   }, []);
 
-  return (
+  return loading ? (
     <div className="panel">
       <div className="panel-body">
-        {loading ? (
-          <div className="loading">Загружаем заказы...</div>
-        ) : orders.length ? (
-          orders.map((order) => (
-            <div className="job" key={order.id}>
-              <div className="meta">
-                {order.publicId} · {order.category}
-              </div>
-              <h3>{order.title}</h3>
-              <p>{order.description}</p>
-              <div className="job-tags">
-                <span className="chip">{orderInitiatorLabel(order.initiator)}</span>
-                <span className="chip">{order.budget}</span>
-                <span className="chip">{order.deadline}</span>
-                {flags?.paymentsRequired ? <span className="status ok">Оплаченное размещение</span> : null}
-              </div>
-              <Link
-                className="btn"
-                style={{ marginTop: 12 }}
-                href={user?.creatorProfile ? "/platform?pane=jobs" : user ? "/platform" : "/login?role=creator"}
-              >
-                {user?.creatorProfile ? "Откликнуться в кабинете" : user ? "Открыть кабинет" : "Войти, чтобы откликнуться"}
-              </Link>
-            </div>
-          ))
-        ) : (
-          <div className="empty">{error || "Публичных заказов пока нет."}</div>
-        )}
+        <div className="loading">Загружаем заказы...</div>
       </div>
     </div>
+  ) : orders.length ? (
+    <div style={{ display: "grid", gap: 12 }}>
+      {orders.map((order) => (
+        <div className="job-card" key={order.id}>
+          <div>
+            <div className="meta">
+              {order.publicId} · {order.category}
+            </div>
+            <h3>{order.title}</h3>
+            <p>{order.description}</p>
+            <div className="job-tags">
+              <span className="chip">{orderInitiatorLabel(order.initiator)}</span>
+              <span className="chip">{order.budget}</span>
+              <span className="chip">{order.deadline}</span>
+              {flags?.paymentsRequired ? <span className="status ok">Оплаченное размещение</span> : null}
+            </div>
+          </div>
+          <div className="job-actions">
+            <Link
+              className="btn"
+              href={user?.creatorProfile ? "/platform?pane=jobs" : user ? "/platform" : "/login?role=creator"}
+            >
+              {user?.creatorProfile ? "Откликнуться в кабинете" : user ? "Открыть кабинет" : "Войти, чтобы откликнуться"}
+            </Link>
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div className="empty">{error || "Публичных заказов пока нет."}</div>
   );
 }

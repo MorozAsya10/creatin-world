@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CheckCircle2, MessageSquare, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowUpRight, CheckCircle2, MessageSquare, ShieldCheck, Sparkles } from "lucide-react";
 import { FeaturedCreators } from "@/components/brand/FeaturedCreators";
 import { HomeStats } from "@/components/brand/HomeStats";
 
@@ -12,14 +12,18 @@ const HERO_COLLAGE = [
   "creatin-hero-6"
 ];
 
+// Плитки категорий на главной — текстовые карточки (номер + название +
+// короткая расшифровка), без фото. Одна карточка выделяется сплошным
+// wine-фоном (accent: true) — просто визуальный акцент ряда, ротировать
+// её по данным смысла не имеет.
 const CATEGORIES = [
-  { num: "01", label: "Дизайн", seed: "creatin-cat-design" },
-  { num: "02", label: "Видео", seed: "creatin-cat-video" },
-  { num: "03", label: "Тексты", seed: "creatin-cat-text" },
-  { num: "04", label: "Маркетинг", seed: "creatin-cat-marketing" },
-  { num: "05", label: "Креатив", seed: "creatin-cat-creative" },
-  { num: "06", label: "AI", seed: "creatin-cat-ai" },
-  { num: "07", label: "Менеджмент", seed: "creatin-cat-management" }
+  { num: "01", label: "Дизайн", desc: "Айдентика, web, графика" },
+  { num: "02", label: "Видео", desc: "Съёмка, режиссура, motion" },
+  { num: "03", label: "Тексты", desc: "Редактура, сценарии, tone of voice" },
+  { num: "04", label: "Маркетинг", desc: "Стратегия, SMM, performance", accent: true },
+  { num: "05", label: "Креатив", desc: "Концепции, кампании, продюсирование" },
+  { num: "06", label: "AI", desc: "Визуалы, видео, автоматизация" },
+  { num: "07", label: "Менеджмент", desc: "Проекты, команды, процессы" }
 ];
 
 const HOW_IT_WORKS = [
@@ -151,11 +155,18 @@ export default function HomePage() {
         </div>
         <div className="category-grid">
           {CATEGORIES.map((item) => (
-            <Link className="category-card" href={`/creators?category=${encodeURIComponent(item.label)}`} key={item.seed}>
-              <img src={picsum(item.seed, 640, 800)} alt="" loading="lazy" />
-              <div className="category-overlay">
+            <Link
+              className={`category-card ${item.accent ? "accent" : ""}`}
+              href={`/creators?category=${encodeURIComponent(item.label)}`}
+              key={item.label}
+            >
+              <div className="category-card-top">
                 <span className="num">{item.num}</span>
+                <ArrowUpRight className="category-card-arrow" size={18} />
+              </div>
+              <div>
                 <b>{item.label}</b>
+                <span>{item.desc}</span>
               </div>
             </Link>
           ))}
@@ -211,10 +222,7 @@ export default function HomePage() {
         </div>
         <div className="audience-grid">
           <article className="audience-card">
-            <div className="audience-card-media">
-              <img src={picsum("creatin-audience-creator", 800, 350)} alt="" loading="lazy" />
-            </div>
-            <div className="eyebrow">Я креатор</div>
+            <span className="role-pill">Я креатор</span>
             <h3>Работайте с заказчиками, которые уже отобраны</h3>
             <p>Анкета, вступление, вакансии, отклики, приглашения и чаты по заказам.</p>
             <ul className="checklist">
@@ -229,11 +237,8 @@ export default function HomePage() {
               Стать креатором
             </Link>
           </article>
-          <article className="audience-card">
-            <div className="audience-card-media">
-              <img src={picsum("creatin-audience-client", 800, 350)} alt="" loading="lazy" />
-            </div>
-            <div className="eyebrow">Я заказчик</div>
+          <article className="audience-card accent">
+            <span className="role-pill">Я заказчик</span>
             <h3>Находите исполнителей быстрее, чем вручную</h3>
             <p>Компания, пакеты размещения, заказы, AI-топ-3, отклики и контакты.</p>
             <ul className="checklist">
