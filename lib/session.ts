@@ -15,12 +15,25 @@ type SessionPayload = {
   issuedAt: number;
 };
 
+// См. пункт 2 в creatin_world_audit_1.md: раньше при отсутствующем/коротком
+// AUTH_SECRET приложение молча подписывало все сессии захардкоженной
+// строкой, которая лежит в открытом виде в публичном репозитории на GitHub —
+// это позволило бы подделать валидную cookie для любого userId. В
+// production теперь падаем громко (500 на любой запрос с сессией) вместо
+// тихой дыры; в dev/тестах оставляем прежний fallback для удобства.
 function authSecret() {
   const secret = process.env.AUTH_SECRET;
-  if (!secret || secret.length < 16) {
-    return "development-only-creatin-world-secret";
+  if (secret && secret.length >= 16) {
+    return secret;
   }
-  return secret;
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "AUTH_SECRET не задан или короче 16 символов в production. Задайте длинную случайную строку в переменных окружения Render."
+    );
+  }
+
+  return "development-only-creatin-world-secret";
 }
 
 function secureSessionCookie() {

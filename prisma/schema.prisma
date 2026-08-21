@@ -169,6 +169,12 @@ model CreatorProfile {
   aiMatches       AiMatch[]
   chats           Chat[]
   payments        Payment[]
+
+  // См. пункт "нет @@index в схеме" в creatin_world_audit_1.md: каталог
+  // (/api/creators, CreatorCatalog.tsx) фильтрует именно по этим трём полям.
+  @@index([status])
+  @@index([category])
+  @@index([availability])
 }
 
 model PortfolioFile {
@@ -260,6 +266,11 @@ model Order {
   aiLogs             AiLog[]
   payments           Payment[]
   chats              Chat[]
+
+  // Публичная лента (/jobs) фильтрует по status=PUBLISHED; кабинет заказчика —
+  // по clientProfileId. Оба поля раньше просматривались full-scan'ом.
+  @@index([status])
+  @@index([clientProfileId])
 }
 
 // Позиция внутри заказа — единица, на которую реально откликается креатор.
@@ -311,6 +322,10 @@ model Application {
   chat              Chat?
 
   @@unique([positionId, creatorProfileId])
+  // Список откликов по заказу (кабинет заказчика) и список откликов
+  // конкретного креатора — два самых частых запроса к этой таблице.
+  @@index([orderId])
+  @@index([creatorProfileId])
 }
 
 model Invitation {
@@ -354,6 +369,10 @@ model Message {
   sender    User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   body      String
   createdAt DateTime @default(now())
+
+  // Переписка чата всегда читается как "все сообщения этого chatId по
+  // порядку времени" — составной индекс покрывает и фильтр, и сортировку.
+  @@index([chatId, createdAt])
 }
 
 model Payment {
@@ -375,6 +394,11 @@ model Payment {
   testPayload      Json?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
+
+  // "Мои платежи" в кабинете (userId) и поиск неоплаченных/зависших
+  // платежей в админке (status) — оба сейчас без индекса.
+  @@index([userId])
+  @@index([status])
 }
 
 // Итоговые (успешные) рекомендации топ-3 по заказу — то, что показывается

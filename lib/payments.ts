@@ -165,6 +165,19 @@ export async function finalizeTelegramPayment(input: {
   if (!payment || payment.provider !== "TELEGRAM") return null;
   if (payment.status === PaymentStatus.SUCCEEDED) return payment; // повторный апдейт — идемпотентно
 
+  // Defence in depth (см. пункт 0 в creatin_world_audit_1.md): проверка
+  // секрета вебхука — основной барьер, но здесь дополнительно сверяем, что
+  // telegramId, от имени которого пришло подтверждение оплаты, действительно
+  // владелец этого платежа, а не просто кто-то, кто угадал/подсмотрел
+  // invoicePayload (это по сути payment.id).
+  const owner = await prisma.user.findUnique({ where: { telegramId: input.telegramId } });
+  if (!owner || owner.id !== payment.userId) {
+    console.error(
+      `finalizeTelegramPayment: telegramId ${input.telegramId} is not the owner of payment ${payment.id} — отклонено`
+    );
+    return null;
+  }
+
   const updated = await prisma.payment.update({
     where: { id: payment.id },
     data: {

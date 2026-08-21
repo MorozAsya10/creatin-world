@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ok, fail, ApiError } from "@/lib/api";
 import { createTelegramInvoicePayment } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
 
 // Оплата через Telegram Payments — то же покрытие целей, что и
@@ -20,6 +21,10 @@ const paymentSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    // Rate limit (см. пункт "нет rate limiting" в creatin_world_audit_1.md) —
+    // платёжный роут, лимит строже, чем на auth.
+    enforceRateLimit(request, { name: "payments:telegram", limit: 10, windowMs: 5 * 60 * 1000 });
+
     if (!process.env.TELEGRAM_PAYMENT_PROVIDER_TOKEN) {
       throw new ApiError(503, "Оплата через Telegram сейчас недоступна");
     }

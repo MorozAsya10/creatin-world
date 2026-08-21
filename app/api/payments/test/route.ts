@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ok, fail, ApiError } from "@/lib/api";
 import { createTestPayment } from "@/lib/payments";
 import { prisma } from "@/lib/prisma";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { requireUser } from "@/lib/session";
 
 // Единственный эндпоинт для всех трёх видов оплаты в продукте (см. подробный
@@ -18,6 +19,10 @@ const paymentSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    // Rate limit (см. пункт "нет rate limiting" в creatin_world_audit_1.md) —
+    // платёжный роут, лимит строже, чем на auth.
+    enforceRateLimit(request, { name: "payments:test", limit: 10, windowMs: 5 * 60 * 1000 });
+
     const user = await requireUser([Role.CREATOR, Role.CLIENT, Role.ADMIN]);
     const body = paymentSchema.parse(await request.json());
 

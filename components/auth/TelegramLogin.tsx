@@ -339,6 +339,18 @@ export function TelegramLogin({ demoEnabled }: { demoEnabled: boolean }) {
             </div>
             <div className="panel-body">
               {role === "creator" ? <CreatorRegistrationFields /> : <ClientRegistrationFields />}
+              {/* См. пункт 152-ФЗ в creatin_world_audit_1.md: явное согласие на
+                  обработку персональных данных перед регистрацией. required
+                  блокирует отправку формы браузером, пока чекбокс не отмечен. */}
+              <label className="field-hint" style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 12 }}>
+                <input type="checkbox" name="consent" required style={{ marginTop: 3 }} />
+                <span>
+                  Согласен(на) на обработку персональных данных в соответствии с{" "}
+                  <a href="/privacy" target="_blank" rel="noreferrer noopener">
+                    политикой конфиденциальности
+                  </a>
+                </span>
+              </label>
               <button className="btn wine" disabled={loading} style={{ marginTop: 12 }}>
                 {loading ? "Отправляем..." : demoEnabled ? "Отправить заявку (демо)" : "Далее: подтвердить в Telegram"}
               </button>

@@ -29,10 +29,17 @@ import { finalizeTelegramPayment } from "@/lib/payments";
 // Telegram считает доставку неуспешной и повторяет один и тот же апдейт
 // (в т.ч. дублируя пересылки в поддержку), см. документацию Bot API про
 // retry-политику вебхуков.
-function verifySecret(request: NextRequest) {
+//
+// ВАЖНО (см. пункт 0 в creatin_world_audit_1.md): раньше при отсутствующем
+// TELEGRAM_WEBHOOK_SECRET этот эндпоинт молча принимал ЛЮБОЙ POST как
+// настоящий апдейт от Telegram — включая поддельный successful_payment,
+// который finalizeTelegramPayment превращал в бесплатную подписку/пакет.
+// Теперь при не настроенном секрете запрос явно отклоняется (503), а не
+// тихо пропускается — ошибка конфигурации становится видимой сразу.
+function verifySecret(request: NextRequest): { ok: boolean; configured: boolean } {
   const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (!expected) return true; // секрет не настроен — пропускаем (для локальной отладки)
-  return request.headers.get("x-telegram-bot-api-secret-token") === expected;
+  if (!expected) return { ok: false, configured: false };
+  return { ok: request.headers.get("x-telegram-bot-api-secret-token") === expected, configured: true };
 }
 
 const menuKeyboard = inlineKeyboard([
@@ -296,7 +303,15 @@ async function applyModerationDecision(
 }
 
 export async function POST(request: NextRequest) {
-  if (!verifySecret(request)) {
+  const secret = verifySecret(request);
+  if (!secret.ok) {
+    if (!secret.configured) {
+      // Явная ошибка конфигурации, а не тихий пропуск — см. комментарий у
+      // verifySecret. 503, а не 401/200, чтобы это было заметно в логах
+      // Render и не выглядело как штатный ответ.
+      console.error("TELEGRAM_WEBHOOK_SECRET не задан — вебхук отклонён. Настройте секрет в Render и передайте его в setWebhook.");
+      return ok({ ok: false, error: "webhook secret is not configured" }, { status: 503 });
+    }
     return ok({ ok: true }, { status: 401 });
   }
 

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { ok, fail, ApiError } from "@/lib/api";
 import { getFeatureFlags } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { normalizeTelegramUser, verifyTelegramPayload, type TelegramLoginPayload } from "@/lib/telegram";
 import { setSessionCookie } from "@/lib/session";
 import { notifyModerationItem } from "@/lib/telegram-bot";
@@ -149,6 +150,11 @@ async function createRoleProfileFromRegistration(
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limit по IP (см. пункт "нет rate limiting" в
+    // creatin_world_audit_1.md) — снижает стоимость перебора telegramId/hash
+    // на этом публичном роуте.
+    enforceRateLimit(request, { name: "auth:telegram", limit: 20, windowMs: 5 * 60 * 1000 });
+
     const payload = (await request.json()) as TelegramLoginPayload;
     verifyTelegramPayload(payload);
     const normalized = normalizeTelegramUser(payload);
